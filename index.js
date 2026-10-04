@@ -16,7 +16,7 @@ const client = new Client({
 // إعدادات البوت الأساسية
 const STAFF_ROLE_ID = '1545520633939624006'; // رتبة الإدارة
 const LOG_CHANNEL_ID = '1543094678038257784'; // روم اللوق
-const TICKET_CATEGORY_ID = '1543094678038257784'; // أيدي الكاتجوري الخاص بالتكتات
+const TICKET_CATEGORY_ID = '1546498225404379279'; // أيدي الكاتجوري الخاص بالتكتات (تم التحديث)
 
 client.once('ready', () => {
     console.log(`[!] تم تشغيل البوت بنجاح باسم: ${client.user.tag}`);
