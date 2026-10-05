@@ -1,7 +1,17 @@
 // تشغيل الخادم الوهمي أولاً للبقاء أونلاين 24 ساعة
 require('./server.js');
 
-const { Client, GatewayIntentBits, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ChannelType, PermissionFlagsBits } = require('discord.js');
+const { 
+    Client, 
+    GatewayIntentBits, 
+    EmbedBuilder, 
+    ActionRowBuilder, 
+    ButtonBuilder, 
+    ButtonStyle, 
+    StringSelectMenuBuilder, 
+    ChannelType, 
+    PermissionFlagsBits 
+} = require('discord.js');
 require('dotenv').config();
 
 const client = new Client({
@@ -16,7 +26,7 @@ const client = new Client({
 // إعدادات البوت الأساسية
 const STAFF_ROLE_ID = '1545520633939624006'; // رتبة الإدارة
 const LOG_CHANNEL_ID = '1543094678038257784'; // روم اللوق
-const TICKET_CATEGORY_ID = '1546498225404379279'; // أيدي الكاتجوري الخاص بالتكتات (تم التحديث)
+const TICKET_CATEGORY_ID = '1546498225404379279'; // أيدي الكاتجوري الخاص بالتكتات
 
 client.once('ready', () => {
     console.log(`[!] تم تشغيل البوت بنجاح باسم: ${client.user.tag}`);
@@ -37,7 +47,7 @@ client.on('messageCreate', async message => {
             .setColor('#5865F2')
             .setFooter({ text: 'نظام الدعم الفني الآلي' });
 
-        const row = new ActionRowBuilder().addComponents(
+        const menuRow = new ActionRowBuilder().addComponents(
             new StringSelectMenuBuilder()
                 .setCustomId('ticket_select_menu')
                 .setPlaceholder('اختر قسم التكت المناسب...')
@@ -60,21 +70,37 @@ client.on('messageCreate', async message => {
                         value: 'store_ticket',
                         emoji: '🛒',
                     },
+                    {
+                        label: 'Refresh Menu',
+                        description: 'إعادة تحديث وتفريغ اختيار القائمة',
+                        value: 'refresh_menu_option',
+                        emoji: '🔄',
+                    },
                 ]),
         );
 
-        await message.channel.send({ embeds: [embed], components: [row] });
+        await message.channel.send({ embeds: [embed], components: [menuRow] });
         await message.delete();
     }
 });
 
 // التعامل مع الأزرار والقوائم المنسدلة
 client.on('interactionCreate', async interaction => {
-    // 1. فتح التكت عبر القائمة المنسدلة
+
+    // 1. التعامل مع القائمة المنسدلة
     if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_select_menu') {
+        const selectedValue = interaction.values[0];
+
+        // في حال اختيار خيار Refresh Menu داخل القائمة
+        if (selectedValue === 'refresh_menu_option') {
+            return interaction.reply({ 
+                content: '🔄 تم تحديث القائمة وتفريغ الاختيار بنجاح!', 
+                ephemeral: true 
+            });
+        }
+
         const guild = interaction.guild;
         const member = interaction.member;
-        const selectedValue = interaction.values[0];
 
         let categoryName = 'دعم';
         let categoryColor = '#5865F2';
@@ -101,7 +127,8 @@ client.on('interactionCreate', async interaction => {
             const channelOptions = {
                 name: channelName,
                 type: ChannelType.GuildText,
-                parent: TICKET_CATEGORY_ID, // وضع الروم مباشرة تحت الكاتجوري المحدد
+                parent: TICKET_CATEGORY_ID,
+                topic: member.id, // حفظ أيدي صاحب التكت لاستخدامه في زر الاستدعاء
                 permissionOverwrites: [
                     {
                         id: guild.id,
@@ -126,10 +153,26 @@ client.on('interactionCreate', async interaction => {
 
             const welcomeEmbed = new EmbedBuilder()
                 .setTitle(`تكت جديد [ قسم: ${categoryName} ]`)
-                .setDescription(`حياك الله يا <@${member.id}>!\nتم فتح التكت بنجاح.\n\nالرجاء طرح مشكلتك أو طلبك بوضوح، **وطاقم الإدارة تم إشعاره وسيتم الرد عليك قريبًا.**\n\nلإغلاق التكت اضغط على الزر بالأسفل.`)
+                .setDescription(`حياك الله يا <@${member.id}>!\nتم فتح التكت بنجاح.\n\nالرجاء طرح مشكلتك أو طلبك بوضوح، **وطاقم الإدارة تم إشعاره وسيتم الرد عليك قريبًا.**`)
                 .setColor(categoryColor);
 
-            const closeRow = new ActionRowBuilder().addComponents(
+            // أزرار التحكم داخل التكت
+            const controlRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('claim_ticket')
+                    .setLabel('استلام التكت')
+                    .setStyle(ButtonStyle.Success)
+                    .setEmoji('🙋‍♂️'),
+                new ButtonBuilder()
+                    .setCustomId('summon_user')
+                    .setLabel('استدعاء العضو')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setEmoji('🔔'),
+                new ButtonBuilder()
+                    .setCustomId('summon_staff')
+                    .setLabel('استدعاء الإدارة')
+                    .setStyle(ButtonStyle.Secondary)
+                    .setEmoji('📢'),
                 new ButtonBuilder()
                     .setCustomId('close_ticket')
                     .setLabel('إغلاق التكت')
@@ -137,11 +180,10 @@ client.on('interactionCreate', async interaction => {
                     .setEmoji('🔒')
             );
 
-            // منشن رتبة الإدارة وعضو التكت عند الفتح
             await ticketChannel.send({ 
                 content: `<@${member.id}> | <@&${STAFF_ROLE_ID}>`, 
                 embeds: [welcomeEmbed], 
-                components: [closeRow] 
+                components: [controlRow] 
             });
 
             await interaction.editReply({ content: `✅ تم إنشاء تكت الخاص بك بنجاح: ${ticketChannel}` });
@@ -152,7 +194,62 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // 2. زر إغلاق التكت
+    // 2. زر استلام التكت (Claim)
+    if (interaction.isButton() && interaction.customId === 'claim_ticket') {
+        const isStaff = interaction.member.roles.cache.has(STAFF_ROLE_ID) || interaction.member.permissions.has(PermissionFlagsBits.Administrator);
+        if (!isStaff) {
+            return interaction.reply({ content: '❌ هذا الزر مخصص لطاقم الإدارة فقط!', ephemeral: true });
+        }
+
+        try {
+            // إخفاء الروم عن باقي الإدارة
+            await interaction.channel.permissionOverwrites.edit(STAFF_ROLE_ID, {
+                ViewChannel: false
+            });
+
+            // السماح للإداري المستلم بفرده برؤية الروم
+            await interaction.channel.permissionOverwrites.edit(interaction.user.id, {
+                ViewChannel: true,
+                SendMessages: true,
+                ReadMessageHistory: true
+            });
+
+            // تعديل الأزرار لتعطيل زر الاستلام وإظهار اسم المستلم
+            const row = ActionRowBuilder.from(interaction.message.components[0]);
+            row.components.forEach(comp => {
+                if (comp.data.custom_id === 'claim_ticket') {
+                    comp.setDisabled(true).setLabel(`مستلمة من: ${interaction.user.username}`);
+                }
+            });
+
+            await interaction.update({ components: [row] });
+            await interaction.followUp({ content: `🙋‍♂️ تم استلام التكت بواسطة <@${interaction.user.id}>. أصبح التكت مغلقاً على باقي الإدارة.` });
+        } catch (err) {
+            console.log('خطأ في استلام التكت:', err);
+        }
+    }
+
+    // 3. زر استدعاء العضو (صاحب التكت)
+    if (interaction.isButton() && interaction.customId === 'summon_user') {
+        const isStaff = interaction.member.roles.cache.has(STAFF_ROLE_ID) || interaction.member.permissions.has(PermissionFlagsBits.Administrator);
+        if (!isStaff) {
+            return interaction.reply({ content: '❌ هذا الزر مخصص لطاقم الإدارة فقط!', ephemeral: true });
+        }
+
+        const ticketOwnerId = interaction.channel.topic;
+        if (!ticketOwnerId) {
+            return interaction.reply({ content: '❌ لم يتم العثور على صاحب التكت.', ephemeral: true });
+        }
+
+        await interaction.reply({ content: `🔔 <@${ticketOwnerId}>، يرجى التواجد بالروم! استدعاء من الإداري: <@${interaction.user.id}>` });
+    }
+
+    // 4. زر استدعاء الإدارة
+    if (interaction.isButton() && interaction.customId === 'summon_staff') {
+        await interaction.reply({ content: `📢 <@&${STAFF_ROLE_ID}>، تم استدعاء الإدارة بواسطة <@${interaction.user.id}>!` });
+    }
+
+    // 5. زر إغلاق التكت
     if (interaction.isButton() && interaction.customId === 'close_ticket') {
         const channel = interaction.channel;
         await interaction.reply({ content: '🔒 سيتم إغلاق التكت وحذفه الآن...' });
@@ -167,7 +264,7 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// نظام رصد حذف الرومات (سواء عن طريق البوت أو بوت النقاط الخارجي)
+// نظام رصد حذف الرومات
 client.on('channelDelete', async channel => {
     if (!channel.guild) return;
     if (channel.name && channel.name.startsWith('ticket-')) {
@@ -176,7 +273,7 @@ client.on('channelDelete', async channel => {
             if (logChannel) {
                 const logEmbed = new EmbedBuilder()
                     .setTitle('🔒 تم إغلاق وحذف تكت')
-                    .setDescription(`اسم الروم المحذوف: **${channel.name}**\nتم إغلاقه وحذفه (إما يدوياً أو بواسطة بوت النقاط).`)
+                    .setDescription(`اسم الروم المحذوف: **${channel.name}**\nتم إغلاقه وحذفه بنجاح.`)
                     .setColor('#FF0000')
                     .setTimestamp();
                 
