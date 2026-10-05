@@ -10,7 +10,10 @@ const {
     ButtonStyle, 
     StringSelectMenuBuilder, 
     ChannelType, 
-    PermissionFlagsBits 
+    PermissionFlagsBits,
+    ModalBuilder,
+    TextInputBuilder,
+    TextInputStyle
 } = require('discord.js');
 require('dotenv').config();
 
@@ -84,14 +87,14 @@ client.on('messageCreate', async message => {
     }
 });
 
-// التعامل مع الأزرار والقوائم المنسدلة
+// التعامل مع التفاعلات (أزرار، قوائم، ونوافذ مدخلات)
 client.on('interactionCreate', async interaction => {
 
     // 1. التعامل مع القائمة المنسدلة
     if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_select_menu') {
         const selectedValue = interaction.values[0];
 
-        // في حال اختيار خيار Refresh Menu داخل القائمة
+        // تفريغ وتحديث الاختيار
         if (selectedValue === 'refresh_menu_option') {
             return interaction.reply({ 
                 content: '🔄 تم تحديث القائمة وتفريغ الاختيار بنجاح!', 
@@ -128,7 +131,7 @@ client.on('interactionCreate', async interaction => {
                 name: channelName,
                 type: ChannelType.GuildText,
                 parent: TICKET_CATEGORY_ID,
-                topic: member.id, // حفظ أيدي صاحب التكت لاستخدامه في زر الاستدعاء
+                topic: member.id, // حفظ أيدي صاحب التكت
                 permissionOverwrites: [
                     {
                         id: guild.id,
@@ -156,13 +159,18 @@ client.on('interactionCreate', async interaction => {
                 .setDescription(`حياك الله يا <@${member.id}>!\nتم فتح التكت بنجاح.\n\nالرجاء طرح مشكلتك أو طلبك بوضوح، **وطاقم الإدارة تم إشعاره وسيتم الرد عليك قريبًا.**`)
                 .setColor(categoryColor);
 
-            // أزرار التحكم داخل التكت
+            // أزرار التحكم داخل التكت (5 أزرار)
             const controlRow = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId('claim_ticket')
                     .setLabel('استلام التكت')
                     .setStyle(ButtonStyle.Success)
                     .setEmoji('🙋‍♂️'),
+                new ButtonBuilder()
+                    .setCustomId('add_user')
+                    .setLabel('إضافة عضو')
+                    .setStyle(ButtonStyle.Primary)
+                    .setEmoji('➕'),
                 new ButtonBuilder()
                     .setCustomId('summon_user')
                     .setLabel('استدعاء العضو')
@@ -202,19 +210,20 @@ client.on('interactionCreate', async interaction => {
         }
 
         try {
-            // إخفاء الروم عن باقي الإدارة
+            // بقاء الروم ظاهرة للإدارة مع سحب صلاحية إرسال الرسائل منهم
             await interaction.channel.permissionOverwrites.edit(STAFF_ROLE_ID, {
-                ViewChannel: false
+                ViewChannel: true,
+                SendMessages: false
             });
 
-            // السماح للإداري المستلم بفرده برؤية الروم
+            // إعطاء الإداري المستلم صلاحية رؤية التكت والكتابة فيه
             await interaction.channel.permissionOverwrites.edit(interaction.user.id, {
                 ViewChannel: true,
                 SendMessages: true,
                 ReadMessageHistory: true
             });
 
-            // تعديل الأزرار لتعطيل زر الاستلام وإظهار اسم المستلم
+            // تحديث زر الاستلام بتمكينه وتغيير اسمه
             const row = ActionRowBuilder.from(interaction.message.components[0]);
             row.components.forEach(comp => {
                 if (comp.data.custom_id === 'claim_ticket') {
@@ -223,13 +232,61 @@ client.on('interactionCreate', async interaction => {
             });
 
             await interaction.update({ components: [row] });
-            await interaction.followUp({ content: `🙋‍♂️ تم استلام التكت بواسطة <@${interaction.user.id}>. أصبح التكت مغلقاً على باقي الإدارة.` });
+            await interaction.followUp({ content: `🙋‍♂️ تم استلام التكت بواسطة <@${interaction.user.id}>. (باقي طاقم الإدارة يمكنهم مشاهدة التكت فقط بدون إمكانية الكتابة).` });
         } catch (err) {
             console.log('خطأ في استلام التكت:', err);
         }
     }
 
-    // 3. زر استدعاء العضو (صاحب التكت)
+    // 3. زر إضافة عضو (فتح النافذة المنبثقة)
+    if (interaction.isButton() && interaction.customId === 'add_user') {
+        const isStaff = interaction.member.roles.cache.has(STAFF_ROLE_ID) || interaction.member.permissions.has(PermissionFlagsBits.Administrator);
+        if (!isStaff) {
+            return interaction.reply({ content: '❌ هذا الزر مخصص لطاقم الإدارة فقط!', ephemeral: true });
+        }
+
+        const modal = new ModalBuilder()
+            .setCustomId('add_user_modal')
+            .setTitle('إضافة شخص إلى التكت');
+
+        const userInput = new TextInputBuilder()
+            .setCustomId('target_user_id')
+            .setLabel('أدخل ايدي (ID) العضو المراد إضافته:')
+            .setStyle(TextInputStyle.Short)
+            .setPlaceholder('مثال: 123456789012345678')
+            .setRequired(true);
+
+        const actionRow = new ActionRowBuilder().addComponents(userInput);
+        modal.addComponents(actionRow);
+
+        await interaction.showModal(modal);
+    }
+
+    // معالجة النتيجة بعد إدخال أيدي العضو في النافذة
+    if (interaction.isModalSubmit() && interaction.customId === 'add_user_modal') {
+        const rawInput = interaction.fields.getTextInputValue('target_user_id');
+        const targetId = rawInput.replace(/[<@!>]/g, '').trim();
+
+        try {
+            const targetMember = await interaction.guild.members.fetch(targetId);
+            if (!targetMember) {
+                return interaction.reply({ content: '❌ لم يتم العثور على العضو بهذا الأيدي!', ephemeral: true });
+            }
+
+            // إعطاء العضو المضاف الصلاحيات
+            await interaction.channel.permissionOverwrites.edit(targetMember.id, {
+                ViewChannel: true,
+                SendMessages: true,
+                ReadMessageHistory: true
+            });
+
+            await interaction.reply({ content: `✅ تم إضافة العضو <@${targetMember.id}> إلى التكت بنجاح بواسطة <@${interaction.user.id}>.` });
+        } catch (err) {
+            await interaction.reply({ content: '❌ أيدي العضو غير صحيح أو أن العضو غير موجود في السيرفر.', ephemeral: true });
+        }
+    }
+
+    // 4. زر استدعاء العضو (صاحب التكت)
     if (interaction.isButton() && interaction.customId === 'summon_user') {
         const isStaff = interaction.member.roles.cache.has(STAFF_ROLE_ID) || interaction.member.permissions.has(PermissionFlagsBits.Administrator);
         if (!isStaff) {
@@ -244,12 +301,12 @@ client.on('interactionCreate', async interaction => {
         await interaction.reply({ content: `🔔 <@${ticketOwnerId}>، يرجى التواجد بالروم! استدعاء من الإداري: <@${interaction.user.id}>` });
     }
 
-    // 4. زر استدعاء الإدارة
+    // 5. زر استدعاء الإدارة
     if (interaction.isButton() && interaction.customId === 'summon_staff') {
         await interaction.reply({ content: `📢 <@&${STAFF_ROLE_ID}>، تم استدعاء الإدارة بواسطة <@${interaction.user.id}>!` });
     }
 
-    // 5. زر إغلاق التكت
+    // 6. زر إغلاق التكت
     if (interaction.isButton() && interaction.customId === 'close_ticket') {
         const channel = interaction.channel;
         await interaction.reply({ content: '🔒 سيتم إغلاق التكت وحذفه الآن...' });
