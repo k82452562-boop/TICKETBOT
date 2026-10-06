@@ -28,6 +28,21 @@ const STAFF_ROLE_ID = '1545520633939624006'; // رتبة الإدارة
 const LOG_CHANNEL_ID = '1543094678038257784'; // روم اللوق
 const TICKET_CATEGORY_ID = '1546498225404379279'; // أيدي الكاتجوري الخاص بالتكتات
 
+// ذاكرة مؤقتة لتجميع بيانات التكت حتى إغلاقه
+const ticketsData = new Map();
+
+// دالة مساعدة لإرسال اللوق لروم اللوق المحددة
+async function sendLog(guild, embed) {
+    try {
+        const logChannel = guild.channels.cache.get(LOG_CHANNEL_ID);
+        if (logChannel) {
+            await logChannel.send({ embeds: [embed] });
+        }
+    } catch (err) {
+        console.log('خطأ في إرسال اللوق:', err);
+    }
+}
+
 client.once('ready', () => {
     console.log(`[!] تم تشغيل البوت بنجاح باسم: ${client.user.tag}`);
 });
@@ -87,7 +102,7 @@ client.on('messageCreate', async message => {
 // التعامل مع التفاعلات (أزرار والقوائم المنسدلة)
 client.on('interactionCreate', async interaction => {
 
-    // 1. التعامل مع القائمة المنسدلة
+    // 1. التعامل مع القائمة المنسدلة (فتح التكت)
     if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_select_menu') {
         const selectedValue = interaction.values[0];
 
@@ -105,13 +120,13 @@ client.on('interactionCreate', async interaction => {
         let categoryName = 'دعم';
         let categoryColor = '#5865F2';
         if (selectedValue === 'support_ticket') {
-            categoryName = 'دعم';
+            categoryName = 'دعم فني';
             categoryColor = '#ff5555';
         } else if (selectedValue === 'general_ticket') {
-            categoryName = 'استفسار';
+            categoryName = 'استفسار عام';
             categoryColor = '#55ff55';
         } else if (selectedValue === 'store_ticket') {
-            categoryName = 'متجر';
+            categoryName = 'متجر وشراء';
             categoryColor = '#ffaa00';
         }
 
@@ -151,6 +166,14 @@ client.on('interactionCreate', async interaction => {
 
             const ticketChannel = await guild.channels.create(channelOptions);
 
+            // حفظ بيانات التكت في الذاكرة للتقرير النهائي
+            ticketsData.set(ticketChannel.id, {
+                ownerId: member.id,
+                category: categoryName,
+                claimedBy: null,
+                addedUsers: []
+            });
+
             const welcomeEmbed = new EmbedBuilder()
                 .setTitle(`تكت جديد [ قسم: ${categoryName} ]`)
                 .setDescription(`حياك الله يا <@${member.id}>!\nتم فتح التكت بنجاح.\n\nالرجاء طرح مشكلتك أو طلبك بوضوح، **وطاقم الإدارة تم إشعاره وسيتم الرد عليك قريبًا.**`)
@@ -186,7 +209,7 @@ client.on('interactionCreate', async interaction => {
             );
 
             await ticketChannel.send({ 
-                content: `<@${member.id}> | <@&${STAFF_ROLE_ID}>`, 
+                content: `<@${member.id}> \vert{} <@&${STAFF_ROLE_ID}>`, 
                 embeds: [welcomeEmbed], 
                 components: [controlRow] 
             });
@@ -207,6 +230,12 @@ client.on('interactionCreate', async interaction => {
         }
 
         try {
+            // حفظ الإداري المستلم في الذاكرة
+            const data = ticketsData.get(interaction.channel.id);
+            if (data) {
+                data.claimedBy = interaction.user.id;
+            }
+
             // الإدارة تشاهد التكت فقط دون إمكانية إرسال رسائل
             await interaction.channel.permissionOverwrites.edit(STAFF_ROLE_ID, {
                 ViewChannel: true,
@@ -229,7 +258,8 @@ client.on('interactionCreate', async interaction => {
             });
 
             await interaction.update({ components: [row] });
-            await interaction.followUp({ content: `🙋‍♂️ تم استلام التكت بواسطة <@${interaction.user.id}>. (باقي طاقم الإدارة يمكنهم مشاهدة التكت فقط بدون إمكانية الكتابة).` });
+            await interaction.followUp({ content: `🙋‍♂️ تم استلام التكت بواسطة <@${interaction.user.id}>.` });
+
         } catch (err) {
             console.log('خطأ في استلام التكت:', err);
         }
@@ -261,6 +291,12 @@ client.on('interactionCreate', async interaction => {
             }
 
             try {
+                // حفظ العضو المضاف في ذاكرة التكت
+                const data = ticketsData.get(interaction.channel.id);
+                if (data && !data.addedUsers.includes(targetMember.id)) {
+                    data.addedUsers.push(targetMember.id);
+                }
+
                 // إعطاء العضو المضاف الصلاحيات الكاملة للقراءة والكتابة
                 await interaction.channel.permissionOverwrites.edit(targetMember.id, {
                     ViewChannel: true,
@@ -309,9 +345,42 @@ client.on('interactionCreate', async interaction => {
         await interaction.reply({ content: `📢 <@&${STAFF_ROLE_ID}>، تم استدعاء الإدارة بواسطة <@${interaction.user.id}>!` });
     }
 
-    // 6. زر إغلاق التكت
+    // 6. زر إغلاق التكت (إرسال اللوق الشامل هنا)
     if (interaction.isButton() && interaction.customId === 'close_ticket') {
         const channel = interaction.channel;
+        const data = ticketsData.get(channel.id) || {
+            ownerId: channel.topic || 'غير معروف',
+            category: 'غير محدد',
+            claimedBy: null,
+            addedUsers: []
+        };
+
+        // تجهيز قائمة الأعضاء المضافين
+        const addedUsersText = data.addedUsers.length > 0 
+            ? data.addedUsers.map(id => `<@${id}>`).join(', ') 
+            : 'لا يوجد أعضاء مضافين';
+
+        // 📄 التقرير الشامل والموحد للتكت في اللوق
+        const finalLogEmbed = new EmbedBuilder()
+            .setTitle('📋 تقرير إغلاق تذكرة (Ticket Log)')
+            .addFields(
+                { name: '📌 اسم التكت:', value: `\`${channel.name}\``, inline: true },
+                { name: '📂 القسم:', value: `${data.category}`, inline: true },
+                { name: '👤 فتح بواسطة:', value: `<@${data.ownerId}> (\`${data.ownerId}\`)`, inline: false },
+                { name: '🙋‍♂️ المستلم:', value: data.claimedBy ? `<@${data.claimedBy}> (\`${data.claimedBy}\`)` : 'لم تُستلم من قبل أي إداري', inline: false },
+                { name: '➕ الأعضاء المضافين:', value: addedUsersText, inline: false },
+                { name: '🔒 أُغلقت بواسطة:', value: `<@${interaction.user.id}> (\`${interaction.user.id}\`)`, inline: false }
+            )
+            .setColor('#ED4245')
+            .setTimestamp()
+            .setFooter({ text: 'نظام اللوق الموحد' });
+
+        // إرسال التقرير الشامل لروم اللوق
+        await sendLog(interaction.guild, finalLogEmbed);
+
+        // تنظيف الذاكرة
+        ticketsData.delete(channel.id);
+
         await interaction.reply({ content: '🔒 سيتم إغلاق التكت وحذفه الآن...' });
         
         setTimeout(async () => {
@@ -321,27 +390,6 @@ client.on('interactionCreate', async interaction => {
                 console.log('خطأ أثناء حذف الروم:', err);
             }
         }, 3000);
-    }
-});
-
-// نظام رصد حذف الرومات وإرسال اللوق
-client.on('channelDelete', async channel => {
-    if (!channel.guild) return;
-    if (channel.name && channel.name.startsWith('ticket-')) {
-        try {
-            const logChannel = channel.guild.channels.cache.get(LOG_CHANNEL_ID);
-            if (logChannel) {
-                const logEmbed = new EmbedBuilder()
-                    .setTitle('🔒 تم إغلاق وحذف تكت')
-                    .setDescription(`اسم الروم المحذوف: **${channel.name}**\nتم إغلاقه وحذفه بنجاح.`)
-                    .setColor('#FF0000')
-                    .setTimestamp();
-                
-                await logChannel.send({ embeds: [logEmbed] });
-            }
-        } catch (err) {
-            console.log('خطأ في إرسال اللوق:', err);
-        }
     }
 });
 
