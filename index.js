@@ -103,7 +103,7 @@ client.on('messageCreate', async message => {
         return;
     }
 
-    // 2. أوامر الباند المخصصة (تعمل بـ ! أو بدون !)
+    // 2. أوامر الباند المخصصة (بدون نموذج / بدون Embed)
     const banCommands = [
         'بنعالي', '!بنعالي', 
         'بنعال_براء', '!بنعال_براء', 
@@ -136,29 +136,11 @@ client.on('messageCreate', async message => {
         // تحديد سبب الباند
         const reason = args.slice(2).join(' ') || 'بدون سبب محدد';
 
-        // عناوين مخصصة حسب الأمر (تدعم وجود ! أو عدمه)
-        let embedTitle = '💥 تم جلد العضو وإعطائه بنعال!';
-        if (command.includes('بنعالي')) embedTitle = '👞 بنعال مباشر شديد اللهجة!';
-        if (command.includes('بنعال_براء')) embedTitle = '👟 بنعال ملكي من **براء**!';
-        if (command.includes('بنعال_حرب')) embedTitle = '⚔️ بنعال حربي من **حرب**!';
-        if (command.includes('بنعال_ريان')) embedTitle = '👢 بنعال فاخر من **ريان**!';
-
         try {
             await target.ban({ reason: `الأمر: ${command} | بواسطة: ${message.author.tag} \vert{} السبب: ${reason}` });
 
-            const banEmbed = new EmbedBuilder()
-                .setTitle(embedTitle)
-                .setDescription(`تم طرد وتبنيد العضو **${target.user.tag}** بنجاح من السيرفر! 🚀`)
-                .addFields(
-                    { name: '👤 العضو المبند:', value: `${target.user} (\`${target.id}\`)`, inline: true },
-                    { name: '🛡️ بواسطة:', value: `${message.author}`, inline: true },
-                    { name: '📝 السبب:', value: reason, inline: false }
-                )
-                .setColor('#FF0000')
-                .setTimestamp()
-                .setFooter({ text: message.guild.name, iconURL: message.guild.iconURL() });
-
-            await message.channel.send({ embeds: [banEmbed] });
+            // إرسال رسالة نصية بسيطة بدون نموذج
+            await message.channel.send('تم تبنيد هاذا الشخص من السيرفر بنجاح');
 
         } catch (err) {
             console.error('خطأ في الباند:', err);
