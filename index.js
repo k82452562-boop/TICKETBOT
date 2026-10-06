@@ -137,10 +137,10 @@ client.on('messageCreate', async message => {
         const reason = args.slice(2).join(' ') || 'بدون سبب محدد';
 
         try {
-            await target.ban({ reason: `الأمر: ${command} | بواسطة: ${message.author.tag} | السبب: ${reason}` });
+            await target.ban({ reason: `الأمر: ${command} | بواسطة: ${message.author.tag} \vert{} السبب: ${reason}` });
 
-            // إرسال الرسالة بالشكل المطلوب
-            await message.channel.send(`✅ **${target.user.tag} banned from the server! ✈️**`);
+            // إرسال الرسالة النصية بالشكل المطلوب بالضبط
+            await message.channel.send(`✅ **${target.user.username}** banned from the server! ✈️`);
 
         } catch (err) {
             console.error('خطأ في الباند:', err);
@@ -192,7 +192,7 @@ client.on('interactionCreate', async interaction => {
                 name: channelName,
                 type: ChannelType.GuildText,
                 parent: TICKET_CATEGORY_ID,
-                topic: member.id, // حفظ أيدي صاحب التكت
+                topic: member.id,
                 permissionOverwrites: [
                     {
                         id: guild.id,
@@ -215,7 +215,6 @@ client.on('interactionCreate', async interaction => {
 
             const ticketChannel = await guild.channels.create(channelOptions);
 
-            // حفظ بيانات التكت
             ticketsData.set(ticketChannel.id, {
                 ownerId: member.id,
                 category: categoryName,
@@ -257,7 +256,7 @@ client.on('interactionCreate', async interaction => {
             );
 
             await ticketChannel.send({ 
-                content: `<@${member.id}> | <@&${STAFF_ROLE_ID}>`, 
+                content: `<@${member.id}> \vert{} <@&${STAFF_ROLE_ID}>`, 
                 embeds: [welcomeEmbed], 
                 components: [controlRow] 
             });
@@ -270,7 +269,7 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // 2. زر استلام التكت (Claim)
+    // 2. زر استلام التكت
     if (interaction.isButton() && interaction.customId === 'claim_ticket') {
         const isStaff = interaction.member.roles.cache.has(STAFF_ROLE_ID) || interaction.member.permissions.has(PermissionFlagsBits.Administrator);
         if (!isStaff) {
@@ -304,7 +303,6 @@ client.on('interactionCreate', async interaction => {
             await interaction.update({ components: [row] });
             await interaction.followUp({ content: `🙋‍♂️ تم استلام التكت بواسطة <@${interaction.user.id}>.` });
 
-            // 📣 إرسال رسالة فورية في اللوق ليستوعبها بوت النقاط فوراً
             const claimEmbed = new EmbedBuilder()
                 .setTitle('🙋‍♂️ استلام تكت (Claim Ticket)')
                 .setDescription(`تم استلام التكت بواسطة <@${interaction.user.id}>`)
@@ -416,8 +414,45 @@ client.on('interactionCreate', async interaction => {
             ? data.addedUsers.map(id => `<@${id}>`).join(', ') 
             : 'لا يوجد أعضاء مضافين';
 
-        // 📄 اللوق الشامل للتكت عند الإغلاق
         const finalLogEmbed = new EmbedBuilder()
             .setTitle('📋 تقرير إغلاق تذكرة (Ticket Log)')
             .addFields(
-                { name: '📌 اسم التكت:', value: `\`${channel
+                { name: '📌 اسم التكت:', value: `\`${channel.name}\``, inline: true },
+                { name: '📂 القسم:', value: `${data.category}`, inline: true },
+                { name: '👤 فتح بواسطة:', value: `<@${data.ownerId}> (\`${data.ownerId}\`)`, inline: false },
+                { name: '🙋‍♂️ المستلم:', value: data.claimedBy ? `<@${data.claimedBy}> (\`${data.claimedBy}\`)` : 'لم تُستلم من قبل أي إداري', inline: false },
+                { name: '➕ الأعضاء المضافين:', value: addedUsersText, inline: false },
+                { name: '🔒 أُغلقت بواسطة:', value: `<@${interaction.user.id}> (\`${interaction.user.id}\`)`, inline: false }
+            )
+            .setColor('#ED4245')
+            .setTimestamp()
+            .setFooter({ text: 'نظام اللوق الموحد' });
+
+        await sendLog(
+            interaction.guild, 
+            `🔒 تم إغلاق التكت بواسطة: <@${interaction.user.id}> | المستلم: ${data.claimedBy ? `<@${data.claimedBy}>` : 'لا يوجد'}`, 
+            finalLogEmbed
+        );
+
+        ticketsData.delete(channel.id);
+
+        await interaction.reply({ content: '🔒 سيتم إغلاق التكت وحذفه الآن...' });
+        
+        setTimeout(async () => {
+            try {
+                await channel.delete();
+            } catch (err) {
+                console.log('خطأ أثناء حذف الروم:', err);
+            }
+        }, 3000);
+    }
+});
+
+const tokenToUse = process.env.TOKEN;
+
+if (!tokenToUse) {
+    console.log('[!] خطأ حرج: لم يتم العثور على التوكن في إعدادات المنصة!');
+    process.exit(1);
+}
+
+client.login(tokenToUse);
