@@ -103,8 +103,14 @@ client.on('messageCreate', async message => {
         return;
     }
 
-    // 2. أوامر الباند المخصصة
-    const banCommands = ['!بنعالي', '!بنعال_براء', '!بنعال_حرب', '!بنعال_ريان'];
+    // 2. أوامر الباند المخصصة (تعمل بـ ! أو بدون !)
+    const banCommands = [
+        'بنعالي', '!بنعالي', 
+        'بنعال_براء', '!بنعال_براء', 
+        'بنعال_حرب', '!بنعال_حرب', 
+        'بنعال_ريان', '!بنعال_ريان'
+    ];
+
     const args = message.content.trim().split(/ +/);
     const command = args[0];
 
@@ -130,12 +136,12 @@ client.on('messageCreate', async message => {
         // تحديد سبب الباند
         const reason = args.slice(2).join(' ') || 'بدون سبب محدد';
 
-        // عناوين مخصصة حسب الأمر
+        // عناوين مخصصة حسب الأمر (تدعم وجود ! أو عدمه)
         let embedTitle = '💥 تم جلد العضو وإعطائه بنعال!';
-        if (command === '!بنعالي') embedTitle = '👞 بنعال مباشر شديد اللهجة!';
-        if (command === '!بنعال_براء') embedTitle = '👟 بنعال ملكي من **براء**!';
-        if (command === '!بنعال_حرب') embedTitle = '⚔️ بنعال حربي من **حرب**!';
-        if (command === '!بنعال_ريان') embedTitle = '👢 بنعال فاخر من **ريان**!';
+        if (command.includes('بنعالي')) embedTitle = '👞 بنعال مباشر شديد اللهجة!';
+        if (command.includes('بنعال_براء')) embedTitle = '👟 بنعال ملكي من **براء**!';
+        if (command.includes('بنعال_حرب')) embedTitle = '⚔️ بنعال حربي من **حرب**!';
+        if (command.includes('بنعال_ريان')) embedTitle = '👢 بنعال فاخر من **ريان**!';
 
         try {
             await target.ban({ reason: `الأمر: ${command} | بواسطة: ${message.author.tag} \vert{} السبب: ${reason}` });
