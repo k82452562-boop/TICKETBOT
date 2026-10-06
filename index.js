@@ -103,7 +103,7 @@ client.on('messageCreate', async message => {
         return;
     }
 
-    // 2. أوامر الباند المخصصة (بدون نموذج / بدون Embed)
+    // 2. أوامر الباند المخصصة
     const banCommands = [
         'بنعالي', '!بنعالي', 
         'بنعال_براء', '!بنعال_براء', 
@@ -137,10 +137,10 @@ client.on('messageCreate', async message => {
         const reason = args.slice(2).join(' ') || 'بدون سبب محدد';
 
         try {
-            await target.ban({ reason: `الأمر: ${command} | بواسطة: ${message.author.tag} \vert{} السبب: ${reason}` });
+            await target.ban({ reason: `الأمر: ${command} | بواسطة: ${message.author.tag} | السبب: ${reason}` });
 
-            // إرسال رسالة نصية بسيطة بدون نموذج
-            await message.channel.send('تم تبنيد هاذا الشخص من السيرفر بنجاح');
+            // إرسال الرسالة بالشكل المطلوب
+            await message.channel.send(`✅ **${target.user.tag} banned from the server! ✈️**`);
 
         } catch (err) {
             console.error('خطأ في الباند:', err);
@@ -257,7 +257,7 @@ client.on('interactionCreate', async interaction => {
             );
 
             await ticketChannel.send({ 
-                content: `<@${member.id}> \vert{} <@&${STAFF_ROLE_ID}>`, 
+                content: `<@${member.id}> | <@&${STAFF_ROLE_ID}>`, 
                 embeds: [welcomeEmbed], 
                 components: [controlRow] 
             });
@@ -420,44 +420,4 @@ client.on('interactionCreate', async interaction => {
         const finalLogEmbed = new EmbedBuilder()
             .setTitle('📋 تقرير إغلاق تذكرة (Ticket Log)')
             .addFields(
-                { name: '📌 اسم التكت:', value: `\`${channel.name}\``, inline: true },
-                { name: '📂 القسم:', value: `${data.category}`, inline: true },
-                { name: '👤 فتح بواسطة:', value: `<@${data.ownerId}> (\`${data.ownerId}\`)`, inline: false },
-                { name: '🙋‍♂️ المستلم:', value: data.claimedBy ? `<@${data.claimedBy}> (\`${data.claimedBy}\`)` : 'لم تُستلم من قبل أي إداري', inline: false },
-                { name: '➕ الأعضاء المضافين:', value: addedUsersText, inline: false },
-                { name: '🔒 أُغلقت بواسطة:', value: `<@${interaction.user.id}> (\`${interaction.user.id}\`)`, inline: false }
-            )
-            .setColor('#ED4245')
-            .setTimestamp()
-            .setFooter({ text: 'نظام اللوق الموحد' });
-
-        // إرسال لوق الإغلاق النهائي
-        await sendLog(
-            interaction.guild, 
-            `🔒 تم إغلاق التكت بواسطة: <@${interaction.user.id}> | المستلم: ${data.claimedBy ? `<@${data.claimedBy}>` : 'لا يوجد'}`, 
-            finalLogEmbed
-        );
-
-        ticketsData.delete(channel.id);
-
-        await interaction.reply({ content: '🔒 سيتم إغلاق التكت وحذفه الآن...' });
-        
-        setTimeout(async () => {
-            try {
-                await channel.delete();
-            } catch (err) {
-                console.log('خطأ أثناء حذف الروم:', err);
-            }
-        }, 3000);
-    }
-});
-
-// سحب التوكن من الإعدادات
-const tokenToUse = process.env.TOKEN;
-
-if (!tokenToUse) {
-    console.log('[!] خطأ حرج: لم يتم العثور على التوكن في إعدادات المنصة!');
-    process.exit(1);
-}
-
-client.login(tokenToUse);
+                { name: '📌 اسم التكت:', value: `\`${channel
