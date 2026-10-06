@@ -28,15 +28,18 @@ const STAFF_ROLE_ID = '1545520633939624006'; // رتبة الإدارة
 const LOG_CHANNEL_ID = '1543094678038257784'; // روم اللوق
 const TICKET_CATEGORY_ID = '1546498225404379279'; // أيدي الكاتجوري الخاص بالتكتات
 
-// ذاكرة مؤقتة لتجميع بيانات التكت حتى إغلاقه
+// ذاكرة مؤقتة لتجميع بيانات التكت
 const ticketsData = new Map();
 
-// دالة مساعدة لإرسال اللوق لروم اللوق المحددة
-async function sendLog(guild, embed) {
+// دالة مساعدة لإرسال اللوق (نص + إمبد) لروم اللوق
+async function sendLog(guild, content, embed) {
     try {
         const logChannel = guild.channels.cache.get(LOG_CHANNEL_ID);
         if (logChannel) {
-            await logChannel.send({ embeds: [embed] });
+            const options = {};
+            if (content) options.content = content;
+            if (embed) options.embeds = [embed];
+            await logChannel.send(options);
         }
     } catch (err) {
         console.log('خطأ في إرسال اللوق:', err);
@@ -47,10 +50,11 @@ client.once('ready', () => {
     console.log(`[!] تم تشغيل البوت بنجاح باسم: ${client.user.tag}`);
 });
 
-// الأوامر النصية البسيطة (!setup)
+// الأوامر النصية (!setup + أوامر الباند)
 client.on('messageCreate', async message => {
-    if (message.author.bot) return;
+    if (message.author.bot || !message.guild) return;
 
+    // 1. أمر Setup القائمة
     if (message.content === '!setup') {
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return message.reply('ما عندك صلاحية تستخدم هالأمر!');
@@ -95,7 +99,65 @@ client.on('messageCreate', async message => {
         );
 
         await message.channel.send({ embeds: [embed], components: [menuRow] });
-        await message.delete();
+        await message.delete().catch(() => {});
+        return;
+    }
+
+    // 2. أوامر الباند المخصصة
+    const banCommands = ['!بنعالي', '!بنعال_براء', '!بنعال_حرب', '!بنعال_ريان'];
+    const args = message.content.trim().split(/ +/);
+    const command = args[0];
+
+    if (banCommands.includes(command)) {
+        // التحقق من صلاحية الباند لدى الشخص المُرْسِل
+        if (!message.member.permissions.has(PermissionFlagsBits.BanMembers)) {
+            return message.reply('❌ ليس لديك صلاحية إعطاء باند!');
+        }
+
+        // جلب العضو المطلوب تبنيده من المنشن أو الـ ID
+        const target = message.mentions.members.first() || 
+            await message.guild.members.fetch(args[1]).catch(() => null);
+
+        if (!target) {
+            return message.reply(`❌ يرجى منشن الشخص أو كتابة ايديه!\nمثال: \`${command} @user السبب\``);
+        }
+
+        // التحقق من هرمية الرتب وقدرة البوت على التبنيد
+        if (!target.bannable) {
+            return message.reply('❌ لا أستطيع تبنيد هذا الشخص! (قد تكون رتبته أعلى مني أو مع إداري أعلى).');
+        }
+
+        // تحديد سبب الباند
+        const reason = args.slice(2).join(' ') || 'بدون سبب محدد';
+
+        // عناوين مخصصة حسب الأمر
+        let embedTitle = '💥 تم جلد العضو وإعطائه بنعال!';
+        if (command === '!بنعالي') embedTitle = '👞 بنعال مباشر شديد اللهجة!';
+        if (command === '!بنعال_براء') embedTitle = '👟 بنعال ملكي من **براء**!';
+        if (command === '!بنعال_حرب') embedTitle = '⚔️ بنعال حربي من **حرب**!';
+        if (command === '!بنعال_ريان') embedTitle = '👢 بنعال فاخر من **ريان**!';
+
+        try {
+            await target.ban({ reason: `الأمر: ${command} | بواسطة: ${message.author.tag} \vert{} السبب: ${reason}` });
+
+            const banEmbed = new EmbedBuilder()
+                .setTitle(embedTitle)
+                .setDescription(`تم طرد وتبنيد العضو **${target.user.tag}** بنجاح من السيرفر! 🚀`)
+                .addFields(
+                    { name: '👤 العضو المبند:', value: `${target.user} (\`${target.id}\`)`, inline: true },
+                    { name: '🛡️ بواسطة:', value: `${message.author}`, inline: true },
+                    { name: '📝 السبب:', value: reason, inline: false }
+                )
+                .setColor('#FF0000')
+                .setTimestamp()
+                .setFooter({ text: message.guild.name, iconURL: message.guild.iconURL() });
+
+            await message.channel.send({ embeds: [banEmbed] });
+
+        } catch (err) {
+            console.error('خطأ في الباند:', err);
+            await message.reply('❌ حدث خطأ أثناء تنفيذ أمر الباند.');
+        }
     }
 });
 
@@ -106,7 +168,6 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_select_menu') {
         const selectedValue = interaction.values[0];
 
-        // تفريغ وتحديث الاختيار
         if (selectedValue === 'refresh_menu_option') {
             return interaction.reply({ 
                 content: '🔄 تم تحديث القائمة وتفريغ الاختيار بنجاح!', 
@@ -166,7 +227,7 @@ client.on('interactionCreate', async interaction => {
 
             const ticketChannel = await guild.channels.create(channelOptions);
 
-            // حفظ بيانات التكت في الذاكرة للتقرير النهائي
+            // حفظ بيانات التكت
             ticketsData.set(ticketChannel.id, {
                 ownerId: member.id,
                 category: categoryName,
@@ -179,7 +240,6 @@ client.on('interactionCreate', async interaction => {
                 .setDescription(`حياك الله يا <@${member.id}>!\nتم فتح التكت بنجاح.\n\nالرجاء طرح مشكلتك أو طلبك بوضوح، **وطاقم الإدارة تم إشعاره وسيتم الرد عليك قريبًا.**`)
                 .setColor(categoryColor);
 
-            // أزرار التحكم داخل التكت
             const controlRow = new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                     .setCustomId('claim_ticket')
@@ -230,26 +290,22 @@ client.on('interactionCreate', async interaction => {
         }
 
         try {
-            // حفظ الإداري المستلم في الذاكرة
             const data = ticketsData.get(interaction.channel.id);
             if (data) {
                 data.claimedBy = interaction.user.id;
             }
 
-            // الإدارة تشاهد التكت فقط دون إمكانية إرسال رسائل
             await interaction.channel.permissionOverwrites.edit(STAFF_ROLE_ID, {
                 ViewChannel: true,
                 SendMessages: false
             });
 
-            // إعطاء الإداري المستلم صلاحية الكتابة والأنشطة
             await interaction.channel.permissionOverwrites.edit(interaction.user.id, {
                 ViewChannel: true,
                 SendMessages: true,
                 ReadMessageHistory: true
             });
 
-            // تحديث زر الاستلام
             const row = ActionRowBuilder.from(interaction.message.components[0]);
             row.components.forEach(comp => {
                 if (comp.data.custom_id === 'claim_ticket') {
@@ -260,12 +316,29 @@ client.on('interactionCreate', async interaction => {
             await interaction.update({ components: [row] });
             await interaction.followUp({ content: `🙋‍♂️ تم استلام التكت بواسطة <@${interaction.user.id}>.` });
 
+            // 📣 إرسال رسالة فورية في اللوق ليستوعبها بوت النقاط فوراً
+            const claimEmbed = new EmbedBuilder()
+                .setTitle('🙋‍♂️ استلام تكت (Claim Ticket)')
+                .setDescription(`تم استلام التكت بواسطة <@${interaction.user.id}>`)
+                .addFields(
+                    { name: '👤 المستلم:', value: `<@${interaction.user.id}> (\`${interaction.user.id}\`)`, inline: true },
+                    { name: '📌 التكت:', value: `${interaction.channel.name}`, inline: true }
+                )
+                .setColor('#FEE75C')
+                .setTimestamp();
+
+            await sendLog(
+                interaction.guild, 
+                `🙋‍♂️ تم استلام التكت بواسطة: <@${interaction.user.id}>`, 
+                claimEmbed
+            );
+
         } catch (err) {
             console.log('خطأ في استلام التكت:', err);
         }
     }
 
-    // 3. زر إضافة عضو (عبر إرسال منشن أو ID في الشات)
+    // 3. زر إضافة عضو
     if (interaction.isButton() && interaction.customId === 'add_user') {
         const isStaff = interaction.member.roles.cache.has(STAFF_ROLE_ID) || interaction.member.permissions.has(PermissionFlagsBits.Administrator);
         if (!isStaff) {
@@ -291,23 +364,19 @@ client.on('interactionCreate', async interaction => {
             }
 
             try {
-                // حفظ العضو المضاف في ذاكرة التكت
                 const data = ticketsData.get(interaction.channel.id);
                 if (data && !data.addedUsers.includes(targetMember.id)) {
                     data.addedUsers.push(targetMember.id);
                 }
 
-                // إعطاء العضو المضاف الصلاحيات الكاملة للقراءة والكتابة
                 await interaction.channel.permissionOverwrites.edit(targetMember.id, {
                     ViewChannel: true,
                     SendMessages: true,
                     ReadMessageHistory: true
                 });
 
-                // حذف رسالة الإداري لتنظيف الشات
                 await message.delete().catch(() => {});
 
-                // إرسال تأكيد في التكت
                 await interaction.channel.send({ 
                     content: `✅ تم إضافة العضو <@${targetMember.id}> إلى التكت بنجاح بواسطة <@${interaction.user.id}>.` 
                 });
@@ -325,7 +394,7 @@ client.on('interactionCreate', async interaction => {
         });
     }
 
-    // 4. زر استدعاء العضو (صاحب التكت)
+    // 4. زر استدعاء العضو
     if (interaction.isButton() && interaction.customId === 'summon_user') {
         const isStaff = interaction.member.roles.cache.has(STAFF_ROLE_ID) || interaction.member.permissions.has(PermissionFlagsBits.Administrator);
         if (!isStaff) {
@@ -345,7 +414,7 @@ client.on('interactionCreate', async interaction => {
         await interaction.reply({ content: `📢 <@&${STAFF_ROLE_ID}>، تم استدعاء الإدارة بواسطة <@${interaction.user.id}>!` });
     }
 
-    // 6. زر إغلاق التكت (إرسال اللوق الشامل هنا)
+    // 6. زر إغلاق التكت
     if (interaction.isButton() && interaction.customId === 'close_ticket') {
         const channel = interaction.channel;
         const data = ticketsData.get(channel.id) || {
@@ -355,12 +424,11 @@ client.on('interactionCreate', async interaction => {
             addedUsers: []
         };
 
-        // تجهيز قائمة الأعضاء المضافين
         const addedUsersText = data.addedUsers.length > 0 
             ? data.addedUsers.map(id => `<@${id}>`).join(', ') 
             : 'لا يوجد أعضاء مضافين';
 
-        // 📄 التقرير الشامل والموحد للتكت في اللوق
+        // 📄 اللوق الشامل للتكت عند الإغلاق
         const finalLogEmbed = new EmbedBuilder()
             .setTitle('📋 تقرير إغلاق تذكرة (Ticket Log)')
             .addFields(
@@ -375,10 +443,13 @@ client.on('interactionCreate', async interaction => {
             .setTimestamp()
             .setFooter({ text: 'نظام اللوق الموحد' });
 
-        // إرسال التقرير الشامل لروم اللوق
-        await sendLog(interaction.guild, finalLogEmbed);
+        // إرسال لوق الإغلاق النهائي
+        await sendLog(
+            interaction.guild, 
+            `🔒 تم إغلاق التكت بواسطة: <@${interaction.user.id}> | المستلم: ${data.claimedBy ? `<@${data.claimedBy}>` : 'لا يوجد'}`, 
+            finalLogEmbed
+        );
 
-        // تنظيف الذاكرة
         ticketsData.delete(channel.id);
 
         await interaction.reply({ content: '🔒 سيتم إغلاق التكت وحذفه الآن...' });
