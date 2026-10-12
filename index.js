@@ -1,5 +1,9 @@
 // تشغيل الخادم الوهمي أولاً للبقاء أونلاين 24 ساعة
-require('./server.js');
+try {
+    require('./server.js');
+} catch (e) {
+    console.log("Server file skipped.");
+}
 
 const { 
     Client, 
@@ -23,10 +27,10 @@ const client = new Client({
     ]
 });
 
-// ⚙️ الإعدادات الأساسية (تم تثبيت رتبة الإدارة الجديدة)
-const STAFF_ROLE_ID = '1554251752574951425'; // رتبة الإدارة الجديدة
-const LOG_CHANNEL_ID = '1554252226732490782'; // روم لوق التكتات
-const TICKET_CATEGORY_ID = '1554252056183967795'; // كاتجوري التكتات
+// ⚙️ الآيديات الجديدة والمحدثة لسيرفر منتدى النظيم
+const STAFF_ROLE_ID = '1545520633939624006'; // رتبة الإدارة الجديدة
+const LOG_CHANNEL_ID = '1543094678038257784'; // روم لوق التكتات
+const TICKET_CATEGORY_ID = '1546498225404379279'; // كاتجوري التكتات
 
 // الذاكرة المؤقتة للتكتات والتحذيرات
 const ticketsData = new Map();
@@ -154,9 +158,7 @@ client.on('messageCreate', async message => {
 
         try {
             await target.ban({ reason: `الأمر: ${command} | بواسطة: ${message.author.tag} \vert{} السبب: ${reason}` });
-            
             await message.channel.send(`✅ **${target.user.username}** banned from the server! ✈️`);
-
         } catch (err) {
             console.error('خطأ في الباند:', err);
             await message.reply('❌ حدث خطأ أثناء تنفيذ أمر الباند.');
@@ -294,7 +296,7 @@ client.on('interactionCreate', async interaction => {
                 permissionOverwrites: [
                     { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
                     { id: member.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
-                    { id: STAFF_ROLE_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }, // رتبة الإدارة الجديدة
+                    { id: STAFF_ROLE_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
                     { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] }
                 ],
             });
