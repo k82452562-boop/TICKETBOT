@@ -27,7 +27,7 @@ intents.members = True
 
 bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 
-# === الثوابت المركزية (محدثة وجاهزة بالكامل) ===
+# === الثوابت المركزية (محدثة بالكامل) ===
 STAFF_ROLE_ID = 1554251752574951425      # رتبة طاقم الإدارة
 TICKET_CATEGORY_ID = 1554252223763058809 # كاتجوري التكتات
 LOG_CHANNEL_ID = 1543094678038257784     # روم اللوق
@@ -44,23 +44,25 @@ async def send_log(guild, embed):
 
 @bot.event
 async def on_ready():
-    print(f"[SYSTEM] Bot is fully operational as {bot.user} | All systems active.")
+    print(f"[SYSTEM] البوت شغال وجاهز يا طويل العمر باسم: {bot.user}")
 
 # ==================== 3. نظام المودالات (Modals) ====================
 
 # مودال إدخال تفاصيل التكت عند الفتح
-class TicketModal(discord.ui.Modal, title="فتح تذكرة دعم جديدة"):
+class TicketModal(discord.ui.Modal, title="تفاصيل التكت والاستفسار"):
     subject = discord.ui.TextInput(
-        label="عنوان أو موضوع المشكلة",
-        placeholder="اكتب عنواناً مختصراً لموضوعك...",
+        label="موضوع الطلب / المشكلة",
+        placeholder="اكتب عنوان بسيط لموضوعك هنا...",
         style=discord.TextStyle.short,
-        required=True
+        required=True,
+        max_length=100
     )
     details = discord.ui.TextInput(
-        label="تفاصيل الطلب الكاملة",
-        placeholder="اشرح مشكلتك بالتفصيل ليتمكن الفريق من خدمتك...",
+        label="شرح المشكلة بالتفصيل",
+        placeholder="اكتب كل التفاصيل اللي تبيها عشان نقدر نخدمك بسرعة...",
         style=discord.TextStyle.paragraph,
-        required=True
+        required=True,
+        max_length=1000
     )
 
     def __init__(self, category_key):
@@ -76,7 +78,7 @@ class TicketModal(discord.ui.Modal, title="فتح تذكرة دعم جديدة")
         cursor.execute("SELECT channel_id FROM active_tickets WHERE owner_id = ? AND category = ?", (str(member.id), self.category_key))
         existing = cursor.fetchone()
         if existing and guild.get_channel(int(existing[0])):
-            return await interaction.edit_original_response(content="❌ لديك تذكرة مفتوحة بالفعل في هذا القسم!")
+            return await interaction.edit_original_response(content="❌ يا غالي عندك تكت مفتوح أصلاً في هذا القسم!")
 
         cat_configs = {
             "support": ("دعم-فني", 0xED4245),
@@ -87,7 +89,7 @@ class TicketModal(discord.ui.Modal, title="فتح تذكرة دعم جديدة")
 
         category_channel = guild.get_channel(TICKET_CATEGORY_ID)
 
-        # صلاحيات القناة الحصرية
+        # صلاحيات القناة
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
             member: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True, attach_files=True),
@@ -103,21 +105,33 @@ class TicketModal(discord.ui.Modal, title="فتح تذكرة دعم جديدة")
                 overwrites=overwrites
             )
 
-            # تخزين البيانات في قاعدة البيانات SQLite
+            # حفظ البيانات في SQLite
             cursor.execute(
                 "INSERT INTO active_tickets (channel_id, owner_id, category, claimed_by, added_users) VALUES (?, ?, ?, ?, ?)",
                 (str(ticket_channel.id), str(member.id), self.category_key, None, json.dumps([]))
             )
             db.commit()
 
+            # --- نص القوانين والكلام الطويل داخل التكت ---
+            rules_text = (
+                "📌 **قوانين وتعليمات التكت:**\n"
+                "1️⃣ **احترام طاقم الإدارة:** يرجى التحدث بأسلوب راقي والتزود بالصبر حتى يتم الرد عليك.\n"
+                "2️⃣ **وضوح المشكلة:** يرجى كتابة مشكلتك أو طلبك كاملاً مع إرفاق الصور أو الأدلة إن وجدت.\n"
+                "3️⃣ **منع التكرار والسبام:** يرجى عدم عمل منشن مستمر للإدارة، فالرد يكون بأسرع وقت ممكن حسب الأسبقية.\n"
+                "4️⃣ **الالتزام بالقسم:** يرجى التأكد من فتح التكت في القسم المخصص لمشكلتك لضمان خدمتك بسرعة.\n"
+                "5️⃣ **إغلاق التكت:** عند انتهاء مشكلتك أو استلام طلبك، يرجى الضغط على زر **إغلاق التكت**.\n\n"
+                "📜 **تفاصيل طلبك:**\n"
+                f"• **العنوان:** {self.subject.value}\n"
+                f"• **الشرح:**\n```\n{self.details.value}\n```"
+            )
+
             welcome_embed = discord.Embed(
-                title=f"تذكرة جديدة: {self.subject.value}",
-                description=f"حياك الله يا <@{member.id}>!\nتم فتح التكت بنجاح، وطاقم الإدارة تم إشعاره وسيتم الرد عليك قريباً.",
+                title=f"أرحب يا <@{member.id}> 👋 | تكت [ {cat_name} ]",
+                description=f"يا هلا والله بك في مركز الدعم الفني الخاص بنا!\nتم فتح التكت الخاص بك بنجاح، وطاقم الإدارة اتوصل له إشعار وبيردون عليك بأقرب وقت.\n\n{rules_text}",
                 color=cat_color,
                 timestamp=datetime.utcnow()
             )
-            welcome_embed.add_field(name="📝 تفاصيل الطلب:", value=f"```{self.details.value}```", inline=False)
-            welcome_embed.set_footer(text="نظام التذاكر المركزي الآلي")
+            welcome_embed.set_footer(text="نظام الدعم الفني وإدارة التذاكر")
 
             view = TicketControlView()
             await ticket_channel.send(
@@ -126,24 +140,25 @@ class TicketModal(discord.ui.Modal, title="فتح تذكرة دعم جديدة")
                 view=view
             )
 
-            await interaction.edit_original_response(content=f"✅ تم إنشاء تذكرتك بنجاح: {ticket_channel.mention}")
+            await interaction.edit_original_response(content=f"✅ أبشر، تم فتح التكت حقك هنا: {ticket_channel.mention}")
 
         except Exception as e:
             print(f"[TICKET_CREATION_ERROR] {e}")
-            await interaction.edit_original_response(content="❌ حدث خطأ أثناء إنشاء قناة التذكرة.")
+            await interaction.edit_original_response(content="❌ حدث خطأ غير متوقع أثناء إنشاء التكت، تأكد من صلاحيات البوت!")
 
 # مودال سبب الإغلاق
-class CloseReasonModal(discord.ui.Modal, title="سبب إغلاق التذكرة"):
+class CloseReasonModal(discord.ui.Modal, title="سبب إغلاق التكت"):
     reason = discord.ui.TextInput(
-        label="سبب الإغلاق",
-        placeholder="اكتب سبب إغلاق التذكرة...",
+        label="سبب الإغلاق (اختياري)",
+        placeholder="اكتب سبب إغلاق التكت هنا...",
         style=discord.TextStyle.short,
-        required=False
+        required=False,
+        max_length=200
     )
 
     async def on_submit(self, interaction: discord.Interaction):
         channel = interaction.channel
-        close_reason = self.reason.value or "بدون سبب محدد"
+        close_reason = self.reason.value or "بدون ذكر سبب"
 
         cursor.execute("SELECT owner_id, category, claimed_by, added_users FROM active_tickets WHERE channel_id = ?", (str(channel.id),))
         row = cursor.fetchone()
@@ -155,23 +170,23 @@ class CloseReasonModal(discord.ui.Modal, title="سبب إغلاق التذكرة
         added_formatted = ", ".join([f"<@{uid}>" for uid in added_users]) if added_users else "لا يوجد"
 
         close_log = discord.Embed(
-            title="📄 تقرير إغلاق تذكرة نهائي",
+            title="📄 تقرير إغلاق تكت",
             color=0xED4245,
             timestamp=datetime.utcnow()
         )
-        close_log.add_field(name="📌 التذكرة:", value=f"`{channel.name}`", inline=True)
+        close_log.add_field(name="📌 التكت:", value=f"`{channel.name}`", inline=True)
         close_log.add_field(name="📂 القسم:", value=f"`{category}`", inline=True)
-        close_log.add_field(name="👤 فتح بواسطة:", value=f"<@{owner_id}>", inline=False)
+        close_log.add_field(name="👤 صاحب التكت:", value=f"<@{owner_id}>", inline=False)
         close_log.add_field(name="🙋‍♂️ المستلم:", value=f"<@{claimed_by}>" if claimed_by != "لم تُستلم" else "لم تُستلم", inline=True)
-        close_log.add_field(name="👥 الأعضاء المضافين:", value=added_formatted, inline=True)
-        close_log.add_field(name="🔒 أغلقت بواسطة:", value=f"<@{interaction.user.id}>", inline=False)
+        close_log.add_field(name="👥 المضافين:", value=added_formatted, inline=True)
+        close_log.add_field(name="🔒 أُغلق بواسطة:", value=f"<@{interaction.user.id}>", inline=False)
         close_log.add_field(name="📝 السبب:", value=f"```{close_reason}```", inline=False)
 
         await send_log(interaction.guild, close_log)
         cursor.execute("DELETE FROM active_tickets WHERE channel_id = ?", (str(channel.id),))
         db.commit()
 
-        await interaction.response.send_message("🔒 سيتم إغلاق وحذف التذكرة خلال 3 ثوانٍ...")
+        await interaction.response.send_message("🔒 تم، بيتم حذف وقفل التكت خلال 3 ثوانٍ...")
 
         import asyncio
         await asyncio.sleep(3)
@@ -186,11 +201,11 @@ class TicketSelectMenu(discord.ui.Select):
     def __init__(self):
         options = [
             discord.SelectOption(label="الدعم الفني والمشاكل", description="لحل المشاكل التقنية وبلاغات اللاعبين", value="support", emoji="🛠️"),
-            discord.SelectOption(label="الاستفسارات العامة", description="لأي استفسار أو سؤال عام", value="general", emoji="💬"),
-            discord.SelectOption(label="قسم المتجر وشراء المنتجات", description="للشراء، الشحن، والاستفسار عن المنتجات", value="store", emoji="🛒"),
+            discord.SelectOption(label="الاستفسارات العامة", description="لأي استفسار أو سؤال عام عندك", value="general", emoji="💬"),
+            discord.SelectOption(label="قسم المتجر والشراء", description="للشراء، الشحن، والاستفسار عن المنتجات", value="store", emoji="🛒"),
             discord.SelectOption(label="إعادة ضبط القائمة", description="تفريغ الاختيار الحالي من القائمة", value="reset", emoji="🔄")
         ]
-        super().__init__(placeholder="اختر قسم التكت المناسب...", min_values=1, max_values=1, options=options, custom_id="ticket_select_menu")
+        super().__init__(placeholder="اختر القسم المناسب من هنا يا بعدي...", min_values=1, max_values=1, options=options, custom_id="ticket_select_menu")
 
     async def callback(self, interaction: discord.Interaction):
         if self.values[0] == "reset":
@@ -212,12 +227,12 @@ class TicketControlView(discord.ui.View):
     async def claim_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         is_staff = interaction.user.get_role(STAFF_ROLE_ID) or interaction.user.guild_permissions.administrator
         if not is_staff:
-            return await interaction.response.send_message("❌ هذا الزر مخصص لطاقم الإدارة فقط!", ephemeral=True)
+            return await interaction.response.send_message("❌ هذا الزر مخصص لرجال الإدارة فقط!", ephemeral=True)
 
         cursor.execute("SELECT claimed_by FROM active_tickets WHERE channel_id = ?", (str(interaction.channel.id),))
         row = cursor.fetchone()
         if row and row[0]:
-            return await interaction.response.send_message(f"❌ التذكرة مستلمة بالفعل بواسطة <@{row[0]}>", ephemeral=True)
+            return await interaction.response.send_message(f"❌ التكت مستلمة أصلاً بواسطة <@{row[0]}>", ephemeral=True)
 
         cursor.execute("UPDATE active_tickets SET claimed_by = ? WHERE channel_id = ?", (str(interaction.user.id), str(interaction.channel.id)))
         db.commit()
@@ -225,14 +240,14 @@ class TicketControlView(discord.ui.View):
         button.disabled = True
         button.label = f"مستلمة: {interaction.user.name}"
         await interaction.message.edit(view=self)
-        await interaction.channel.send(f"🙋‍♂️ تم استلام التكت بواسطة <@{interaction.user.id}>.")
+        await interaction.channel.send(f"🙋‍♂️ كفو! تم استلام التكت بواسطة الإداري: <@{interaction.user.id}>.")
 
         claim_embed = discord.Embed(
-            title="🙋‍♂️ استلام تذكرة",
+            title="🙋‍♂️ استلام تكت",
             color=0xFEE75C,
             timestamp=datetime.utcnow()
         )
-        claim_embed.add_field(name="التذكرة:", value=interaction.channel.name, inline=True)
+        claim_embed.add_field(name="التكت:", value=interaction.channel.name, inline=True)
         claim_embed.add_field(name="المستلم:", value=f"<@{interaction.user.id}>", inline=True)
         await send_log(interaction.guild, claim_embed)
 
@@ -240,9 +255,9 @@ class TicketControlView(discord.ui.View):
     async def add_user(self, interaction: discord.Interaction, button: discord.ui.Button):
         is_staff = interaction.user.get_role(STAFF_ROLE_ID) or interaction.user.guild_permissions.administrator
         if not is_staff:
-            return await interaction.response.send_message("❌ مخصص لطاقم الإدارة فقط.", ephemeral=True)
+            return await interaction.response.send_message("❌ هذا الخيار للإدارة فقط.", ephemeral=True)
 
-        await interaction.response.send_message("💬 ارسل منشن العضو أو الأيدي الخاص به في الشات الآن (لديك 30 ثانية)...", ephemeral=True)
+        await interaction.response.send_message("💬 أرسل منشن العضو أو الأيدي حقه بالشات الحين (معك 30 ثانية)...", ephemeral=True)
 
         def check(m):
             return m.author.id == interaction.user.id and m.channel.id == interaction.channel.id
@@ -264,25 +279,25 @@ class TicketControlView(discord.ui.View):
                     cursor.execute("UPDATE active_tickets SET added_users = ? WHERE channel_id = ?", (json.dumps(users_list), str(interaction.channel.id)))
                     db.commit()
 
-            await interaction.channel.send(f"✅ تم إضافة العضو <@{target.id}> إلى التكت بنجاح بواسطة <@{interaction.user.id}>.")
+            await interaction.channel.send(f"✅ أبشر، تم إضافة العضو <@{target.id}> للتكت بواسطة <@{interaction.user.id}>.")
         except Exception:
-            await interaction.followup.send("⏰ انتهت المهلة أو لم يتم العثور على العضو.", ephemeral=True)
+            await interaction.followup.send("⏰ انتهت المهلة أو الأيدي غير صحيح!", ephemeral=True)
 
     @discord.ui.button(label="استدعاء العضو", style=discord.ButtonStyle.secondary, emoji="🔔", custom_id="summon_user_btn")
     async def summon_user(self, interaction: discord.Interaction, button: discord.ui.Button):
         is_staff = interaction.user.get_role(STAFF_ROLE_ID) or interaction.user.guild_permissions.administrator
         if not is_staff:
-            return await interaction.response.send_message("❌ مخصص للإدارة.", ephemeral=True)
+            return await interaction.response.send_message("❌ هذا الخيار للإدارة فقط.", ephemeral=True)
 
         owner_id = interaction.channel.topic
         if not owner_id:
-            return await interaction.response.send_message("❌ لم يتم العثور على صاحب التكت.", ephemeral=True)
+            return await interaction.response.send_message("❌ ما قدرنا نوصل لصاحب التكت.", ephemeral=True)
 
-        await interaction.response.send_message(f"🔔 <@{owner_id}>، يرجى التواجد بالروم! استدعاء من الإداري: <@{interaction.user.id}>")
+        await interaction.response.send_message(f"🔔 يا <@{owner_id}>، لاهنت ارجع للتكت! استدعاء من الإداري: <@{interaction.user.id}>")
 
     @discord.ui.button(label="استدعاء الإدارة", style=discord.ButtonStyle.secondary, emoji="📢", custom_id="summon_staff_btn")
     async def summon_staff(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message(f"📢 <@&{STAFF_ROLE_ID}>، تم استدعاء الإدارة بواسطة <@{interaction.user.id}>!")
+        await interaction.response.send_message(f"📢 يا إخوان <@&{STAFF_ROLE_ID}>، مطلوب حضوركم للتكت من قبل: <@{interaction.user.id}>!")
 
     @discord.ui.button(label="إغلاق التكت", style=discord.ButtonStyle.danger, emoji="🔒", custom_id="close_ticket_btn")
     async def close_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -299,11 +314,14 @@ async def on_message(message):
     # 1. أمر إنشاء لوحة التكتات !setup
     if message.content == "!setup":
         if not message.author.guild_permissions.administrator:
-            return await message.reply("ما عندك صلاحية تستخدم هالأمر!")
+            return await message.reply("ما عندك صلاحية تستخدم هالأمر يا طويل العمر!")
 
         embed = discord.Embed(
-            title="🎫 نظام التكتات المركزي",
-            description="يرجى اختيار **القسم المناسب** من القائمة المنسدلة بالأسفل لفتح تكت جديد وتوجيهك للإدارة المختصة.",
+            title="🎫 مركز التذاكر والدعم الفني",
+            description=(
+                "أرحب بك في مركز الدعم الفني والخدمات العامة!\n\n"
+                "يرجى اختيار **القسم المناسب لموضوعك** من القائمة المنسدلة بالأسفل لفتح تكت وتوجيهك للإدارة المختصة مباشرة."
+            ),
             color=EMBED_COLOR
         )
         embed.set_footer(text="نظام الدعم الفني الآلي")
@@ -324,7 +342,7 @@ async def on_message(message):
     args = message.content.strip().split()
     if args and args[0] in ban_commands:
         if not message.author.guild_permissions.ban_members:
-            return await message.reply("❌ ليس لديك صلاحية إعطاء باند!")
+            return await message.reply("❌ ما عندك صلاحية تبنيد يا الغالي!")
 
         target = None
         if message.mentions:
@@ -336,7 +354,7 @@ async def on_message(message):
                 pass
 
         if not target:
-            return await message.reply(f"❌ يرجى منشن الشخص أو كتابة ايديه!\nمثال: `{args[0]} @user السبب`")
+            return await message.reply(f"❌ لاهنت سو منشن للشخص أو اكتب ايديه!\nمثال: `{args[0]} @user السبب`")
 
         reason = " ".join(args[2:]) if len(args) > 2 else "بدون سبب محدد"
 
@@ -345,14 +363,13 @@ async def on_message(message):
             await message.channel.send(f"✅ **{target.name}** banned from the server! ✈️")
         except Exception as e:
             print(f"[BAN_ERROR] {e}")
-            await message.reply("❌ لا أستطيع تبنيد هذا الشخص! (قد تكون رتبته أعلى مني أو رتبة إدارية).")
+            await message.reply("❌ ما أقدر أبنّد هذا الشخص! (قد تكون رتبته أعلى مني أو رتبة إدارية).")
 
     await bot.process_commands(message)
 
-# ==================== 6. تشغيل البوت تلقائياً عبر متغيرات البيئة ====================
+# ==================== 6. تشغيل البوت ====================
 token = os.getenv("TOKEN")
 if token:
     bot.run(token)
 else:
-    # التوكن الافتراضي إذا لم يتم العثور على متغير بيئة
     bot.run(os.environ.get("DISCORD_TOKEN", "TOKEN_HERE"))
