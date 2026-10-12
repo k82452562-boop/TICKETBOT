@@ -1,14 +1,14 @@
 {
   "name": "ticket-bot",
-  "version": "1.0.0",
-  "description": "Discord Ticket Bot with Select Menu",
+  "version": "2.0.0",
+  "description": "Saudi Discord Ticket Bot",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "discord.js": "^14.14.0",
-    "dotenv": "^16.4.0",
-    "express": "^4.19.2"
+    "better-sqlite3": "^11.3.0",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5"
   }
 }
