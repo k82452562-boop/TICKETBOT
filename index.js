@@ -26,12 +26,10 @@ const client = new Client({
     ]
 });
 
-// ⚙️ الإعدادات الأساسية والثوابت
 const STAFF_ROLE_ID = '1554251752574951425';
 const LOG_CHANNEL_ID = '1554252226732490782';
 const TICKET_CATEGORY_ID = '1554252056183967795';
 
-// 🔑 مفتاح Groq مقسم لتجاوز حظر قيت هوب
 const part1 = "gsk_xdp5oajBHtY";
 const part2 = "osx3ekegMWGdyb3FYlG0L5uS4k7yoKdTde5REYiUL";
 const GROQ_API_KEY = part1 + part2;
@@ -41,7 +39,6 @@ const ticketsData = new Map();
 
 const aiSystemPrompt = `أنت بوت ديسكورد ذكي وفلّة وطقطوق لسيرفر منتدى النظيم وتتكلم بلهجة سعودية عامية.`;
 
-// 🤖 دالة اتصال مبسطة ونهائية بـ Groq
 async function fetchGroqResponse(userPrompt) {
     try {
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -51,7 +48,7 @@ async function fetchGroqResponse(userPrompt) {
                 'Authorization': `Bearer ${GROQ_API_KEY}`
             },
             body: JSON.stringify({
-                model: "llama-3.3-70b-versatile",
+                model: "llama-3.1-8b-instant",
                 messages: [
                     { role: "system", content: aiSystemPrompt },
                     { role: "user", content: userPrompt }
@@ -63,22 +60,11 @@ async function fetchGroqResponse(userPrompt) {
         if (data.choices && data.choices[0]?.message?.content) {
             return data.choices[0].message.content;
         } else {
-            console.error("Groq Error Data:", JSON.stringify(data));
             return null;
         }
     } catch (err) {
-        console.error("Fetch Error:", err);
         return null;
     }
-}
-
-async function sendLog(guild, content, embed) {
-    try {
-        const logChannel = guild.channels.cache.get(LOG_CHANNEL_ID);
-        if (logChannel) {
-            await logChannel.send({ content, embeds: embed ? [embed] : [] });
-        }
-    } catch (err) {}
 }
 
 client.once('ready', () => {
@@ -168,58 +154,6 @@ client.on('messageCreate', async message => {
         await message.channel.send({ embeds: [embed], components: [menuRow] });
         await message.delete().catch(() => {});
         return;
-    }
-});
-
-client.on('interactionCreate', async interaction => {
-    if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_select_menu') {
-        if (interaction.values[0] === 'refresh_menu_option') {
-            return interaction.reply({ content: '🔄 تم تحديث القائمة!', ephemeral: true });
-        }
-
-        const guild = interaction.guild;
-        const member = interaction.member;
-        const channelName = `ticket-${interaction.values[0]}-${member.user.username}`.toLowerCase();
-
-        await interaction.deferReply({ ephemeral: true });
-
-        try {
-            const ticketChannel = await guild.channels.create({
-                name: channelName,
-                type: ChannelType.GuildText,
-                parent: TICKET_CATEGORY_ID,
-                topic: member.id,
-                permissionOverwrites: [
-                    { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
-                    { id: member.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
-                    { id: STAFF_ROLE_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] }
-                ],
-            });
-
-            ticketsData.set(ticketChannel.id, { ownerId: member.id, claimedBy: null });
-
-            const controlRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('claim_ticket').setLabel('🙋‍♂️ استلام').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId('close_ticket').setLabel('🔒 إغلاق').setStyle(ButtonStyle.Danger)
-            );
-
-            await ticketChannel.send({ content: `<@${member.id}> | <@&${STAFF_ROLE_ID}>`, components: [controlRow] });
-            await interaction.editReply({ content: `✅ تم إنشاء التكت: ${ticketChannel}` });
-        } catch (e) {
-            await interaction.editReply({ content: '❌ حدث خطأ أثناء إنشاء التكت.' });
-        }
-    }
-
-    if (interaction.isButton() && interaction.customId === 'claim_ticket') {
-        let data = ticketsData.get(interaction.channel.id) || {};
-        data.claimedBy = interaction.user.id;
-        ticketsData.set(interaction.channel.id, data);
-        await interaction.reply({ content: `🙋‍♂️ تم استلام التكت بواسطة <@${interaction.user.id}>` });
-    }
-
-    if (interaction.isButton() && interaction.customId === 'close_ticket') {
-        await interaction.reply({ content: '🔒 جاري إغلاق التكت...' });
-        setTimeout(() => interaction.channel.delete().catch(() => {}), 2000);
     }
 });
 
