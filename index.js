@@ -33,7 +33,7 @@ const STAFF_ROLE_ID = '1554251752574951425'; // رتبة الإدارة
 const LOG_CHANNEL_ID = '1554252226732490782'; // روم لوق التكتات
 const TICKET_CATEGORY_ID = '1554252056183967795'; // كاتجوري التكتات
 
-// تهيئة آمنة للذكاء الاصطناعي بدون كراش
+// تهيئة الذكاء الاصطناعي (Gemini AI)
 let aiModel = null;
 if (process.env.GEMINI_API_KEY) {
     try {
@@ -42,8 +42,8 @@ if (process.env.GEMINI_API_KEY) {
         const aiSystemPrompt = `
 أنت بوت ديسكورد ذكي وفلّة وطقطوق لسيرفر "منتدى النظيم".
 تتكلم بلهجة سعودية عامية 100% (مصطلحات: يا بعد حيي، يالطيب، وش السالفة، تكفى، كفو، يا حليلك، أرحب).
-- في الشات العام: إذا سألك أحد سؤال غبي أو بديهي، طقطق عليه بأسلوب فكاهي وسريع قبل تجاوبه.
-- في التكتات والدعم الفني: حاول تساعد العضو بدقة وبلهجة محترمة ولطيفة. إذا السؤال ما تعرفه أو يحتاج تدخل إداري بشر، قل له بكل بساطة إنك بتنادي الإدارة.
+- في الشات العام والتكتات: جاوب العضو بدقة وبلهجة محترمة ولطيفة وسعودية عامية. إذا كان السؤال غبي أو شاطح طقطق عليه بأسلوب فكاهي.
+- إذا كان السؤال يحتاج تدخل إداري أو غير معروف، قل له بوضوح إنك بتنادي الإدارة.
 `;
         aiModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash", systemInstruction: aiSystemPrompt });
         console.log("[+] تم تفعيل الذكاء الاصطناعي بنجاح!");
@@ -72,77 +72,49 @@ async function sendLog(guild, content, embed) {
 
 client.once('ready', () => {
     console.log(`[!] ارحب تراحيب المطر! البوت الخارق شغال باسم: ${client.user.tag} 👑🚀`);
-    client.user.setActivity('منتدى النظيم 🛡️ | النظام الملكي', { type: 0 });
+    client.user.setActivity('منتدى النظيم 🛡️ | الذكاء السعودي', { type: 0 });
 });
 
-// 📩 الأوامر والتفاعلات النصية
+// 📩 الاستجابة التلقائية في التكتات والشات العام
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild) return;
 
     const args = message.content.trim().split(/ +/);
     const command = args[0].toLowerCase();
 
-    // 1️⃣ تفاعل الذكاء الاصطناعي داخل التكتات تلقائياً
-    if (message.channel.parentId === TICKET_CATEGORY_ID && !message.content.startsWith('!')) {
-        const ticketInfo = ticketsData.get(message.channel.id);
-        
-        if (ticketInfo && message.author.id === ticketInfo.ownerId && !ticketInfo.aiResponded) {
-            ticketInfo.aiResponded = true;
+    // 1️⃣ الرد التلقائي الفوري على أي رسالة يكتبها العضو داخل روم التكت بدون الحاجة لأمر!
+    if (message.channel.parentId === TICKET_CATEGORY_ID) {
+        // عدم الاستجابة لأوامر الإدارة التي تبدأ بـ !
+        if (message.content.startsWith('!')) return;
 
-            if (aiModel) {
-                await message.channel.sendTyping();
-                try {
-                    let serverContext = "";
-                    const textChannels = message.guild.channels.cache.filter(c => c.type === ChannelType.GuildText && c.id !== message.channel.id);
-                    
-                    for (const [id, ch] of textChannels) {
-                        if (ch.permissionsFor(message.guild.members.me).has(PermissionFlagsBits.ReadMessageHistory)) {
-                            const lastMsgs = await ch.messages.fetch({ limit: 5 }).catch(() => null);
-                            if (lastMsgs) {
-                                serverContext += `\n[محتوى من روم ${ch.name}]: ` + lastMsgs.map(m => m.content).join(" | ");
-                            }
-                        }
-                    }
+        if (aiModel) {
+            await message.channel.sendTyping();
+            try {
+                const prompt = `سؤال العضو في التكت: "${message.content}"`;
+                const result = await aiModel.generateContent(prompt);
+                const aiText = result.response.text();
 
-                    const prompt = `
-سؤال العضو في التكت: "${message.content}"
-معلومات إضافية من رومات السيرفر:
-${serverContext.slice(0, 1500)}
-
-المطلوب:
-إذا كان السؤال بسيط وموجود بالمعلومات أعلاه، جاوب العضو فوراً بلهجة سعودية عامية لطيفة ومباشرة.
-إذا كان السؤال يحتاج تدخل إداري أو غير معروف، رد عليه بـ: "NEED_STAFF" متضمنة مع رسالة ترحيبية وتقول له إنك بتنادي الإدارة.
-`;
-
-                    const result = await aiModel.generateContent(prompt);
-                    const aiText = result.response.text();
-
-                    if (aiText.includes("NEED_STAFF")) {
-                        const cleanMsg = aiText.replace("NEED_STAFF", "").trim();
-                        await message.reply(cleanMsg || "يا هلا بك! موضوعك يبيله تدخل طاقم الإدارة، أبشر بعزك تم إشعارهم وسيتم الرد عليك فوراً 🚀");
-                        await message.channel.send(`📢 <@&${STAFF_ROLE_ID}>، استدعاء آلي للتكت! العضو ينظر المساعدة.`);
-                    } else {
-                        await message.reply(`🤖 **المساعد الذكي:**\n${aiText}\n\n*(إذا إجابتي ما كفتك، اضغط على زر "📢 إشعار طاقم الإدارة" تحت ويوصلونك بأسرع وقت!)*`);
-                    }
-
-                } catch (err) {
-                    console.error("خطأ في ذكاء التكت:", err);
-                }
+                await message.reply(`🤖 **المساعد الذكي:**\n${aiText}`);
+            } catch (err) {
+                console.error("خطأ الذكاء الاصطناعي:", err);
+                await message.reply('يا هلا بك! جاري تحويل طلبك لطاقم الإدارة للرد عليك بأسرع وقت 🚀');
             }
-            return;
+        } else {
+            await message.reply('يا هلا بك! تم استلام رسالتك وسيتم الرد عليك من قبل طاقم الإدارة بأسرع وقت 🚀');
         }
+        return;
     }
 
-    // 2️⃣ الذكاء الاصطناعي في الشات العام (!سؤال أو منشن)
-    if (message.mentions.has(client.user) || command === '!سؤال' || command === '!ذكاء') {
-        const userQuery = message.content.replace(/<@!?\d+>|!سؤال|!ذكاء/g, '').trim();
+    // 2️⃣ الذكاء الاصطناعي في الشات العام (!سؤال / إذكاء / منشن)
+    if (message.mentions.has(client.user) || command === '!سؤال' || command === 'إذكاء' || command === '!ذكاء') {
+        const userQuery = message.content.replace(/<@!?\d+>|!سؤال|إذكاء|!ذكاء/g, '').trim();
 
         if (!userQuery) {
             return message.reply('وش تبي يا الغالي؟ اكتب سؤالك مو تسوي لي منشن فاضي 🗿');
         }
 
         if (!aiModel) {
-            return message.reply('❌ مفتاح الذكاء الاصطناعي غير مفعل حالياً لدى الإدارة.');
+            return message.reply('❌ مفتاح الذكاء الاصطناعي غير مفعل حالياً في إعدادات Railway.');
         }
 
         await message.channel.sendTyping();
@@ -151,7 +123,7 @@ ${serverContext.slice(0, 1500)}
             await message.reply(result.response.text());
         } catch (err) {
             console.error(err);
-            await message.reply('أبشرك الذكاء عندي فصل، جرب تسألني بعد شوي 🌚');
+            await message.reply('أبشرك الذكاء عندي فصل، تأكد من مفتاح API في Railway 🌚');
         }
         return;
     }
@@ -172,11 +144,10 @@ ${serverContext.slice(0, 1500)}
 
 ─── ･ ｡ﾟ☆: *.☽ .* :☆ﾟ. ───
 
-📜 **قوانين وشروط فتح التكت (نرجو الالتزام):**
-▫️ **1. اطرح مشكلتك فوراً:** أول ما تفتح التكت اكتب موضوعك وتفاصيلك كاملة بدون انتظار.
-▫️ **2. يمنع الاستهبال والتجربة:** فتح التكت بدون سبب جدي يحرّمك من الخدمة وقد يعرّضك للباند 👞.
-▫️ **3. الاحترام المتبادل:** التعامل الأنيق يسرّع من إنجاز طلبك.
-▫️ **4. التزام الصبر:** المساعد الذكي والإدارة متواجدون لخدمتك بأقرب وقت.
+📜 **قوانين وشروط فتح التكت:**
+▫️ **1. اطرح مشكلتك فوراً:** أول ما تفتح التكت اكتب موضوعك وتفاصيلك كاملة.
+▫️ **2. يمنع الاستهبال والتجربة:** فتح التكت بدون سبب جدي يعرّضك للباند 👞.
+▫️ **3. الصبر والاحترام:** المساعد الذكي والإدارة متواجدون لخدمتك.
 
 ─── ･ ｡ﾟ☆: *.☽ .* :☆ﾟ. ───
 ✨ **اختر القسم المناسب لك من القائمة تحت 👇**
@@ -300,8 +271,7 @@ client.on('interactionCreate', async interaction => {
                 ownerId: member.id,
                 category: categoryName,
                 claimedBy: null,
-                addedUsers: [],
-                aiResponded: false
+                addedUsers: []
             });
 
             const welcomeEmbed = new EmbedBuilder()
