@@ -29,7 +29,7 @@ const STAFF_ROLE_ID = '1554251752574951425';
 const LOG_CHANNEL_ID = '1554252226732490782';
 const TICKET_CATEGORY_ID = '1554252056183967795';
 
-// مانع التكرار المطلق للرسائل
+// مانع التكرار الفولاذي للرسائل
 const processedMessages = new Set();
 
 const aiSystemPrompt = `
@@ -39,47 +39,57 @@ const aiSystemPrompt = `
 - إذا كان السؤال يحتاج تدخل إداري أو غير معروف، قل له بوضوح إنك بتنادي الإدارة.
 `;
 
-// دالة اتصال ذكية تدعم مفاتيح AQ. والمفاتيح التقليدية AIza
+// دالة اتصال شاملة تجرّب الطريقتين تلقائياً (URL Key و Bearer Header)
 async function fetchGeminiResponse(userPrompt) {
     const rawKey = process.env.GEMINI_API_KEY;
     if (!rawKey) {
-        console.log("❌ GEMINI_API_KEY is missing");
+        console.log("❌ GEMINI_API_KEY is missing in Railway Variables!");
         return null;
     }
 
     const apiKey = rawKey.trim();
-    let url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`;
-    const headers = { 'Content-Type': 'application/json' };
-
-    // التحقق من نوع المفتاح (AQ أو AIza)
-    if (apiKey.startsWith('AIza')) {
-        url += `?key=${apiKey}`;
-    } else {
-        headers['Authorization'] = `Bearer ${apiKey}`;
-    }
-
-    const requestBody = {
+    const requestBody = JSON.stringify({
         contents: [{ parts: [{ text: `${aiSystemPrompt}\n\nسؤال المستخدم: ${userPrompt}` }] }]
-    };
+    });
 
+    // تجربة الطريقة الأولى (Standard Query Key)
     try {
-        const response = await fetch(url, {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+        const res = await fetch(url, {
             method: 'POST',
-            headers: headers,
-            body: JSON.stringify(requestBody)
+            headers: { 'Content-Type': 'application/json' },
+            body: requestBody
         });
-
-        const data = await response.json();
+        const data = await res.json();
         if (data && data.candidates && data.candidates[0]?.content?.parts[0]?.text) {
             return data.candidates[0].content.parts[0].text;
-        } else {
-            console.error("❌ Gemini Error Response:", JSON.stringify(data));
-            return null;
         }
-    } catch (err) {
-        console.error("❌ Fetch Exception:", err);
-        return null;
+    } catch (e) {
+        console.log("Method 1 failed, trying Method 2...");
     }
+
+    // تجربة الطريقة الثانية (Bearer Token)
+    try {
+        const url2 = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`;
+        const res2 = await fetch(url2, {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey}`
+            },
+            body: requestBody
+        });
+        const data2 = await res2.json();
+        if (data2 && data2.candidates && data2.candidates[0]?.content?.parts[0]?.text) {
+            return data2.candidates[0].content.parts[0].text;
+        } else {
+            console.error("❌ Gemini API Error Output:", JSON.stringify(data2));
+        }
+    } catch (e) {
+        console.error("❌ Method 2 Exception:", e);
+    }
+
+    return null;
 }
 
 // الذاكرة المؤقتة للتكتات بحالة الاستلام
@@ -107,6 +117,7 @@ client.once('ready', () => {
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild) return;
 
+    // حظر التكرار
     if (processedMessages.has(message.id)) return;
     processedMessages.add(message.id);
     setTimeout(() => processedMessages.delete(message.id), 30000);
@@ -114,7 +125,7 @@ client.on('messageCreate', async message => {
     const args = message.content.trim().split(/ +/);
     const command = args[0].toLowerCase();
 
-    // 1️⃣ تفاعل التكتات الذكي
+    // 1️⃣ تفاعل التكتات
     if (message.channel.parentId === TICKET_CATEGORY_ID) {
         const isExplicitAiCommand = command === '!سؤال' || command === 'إذكاء' || command === '!ذكاء' || message.mentions.has(client.user);
         const ticketInfo = ticketsData.get(message.channel.id) || { claimedBy: null };
@@ -128,14 +139,15 @@ client.on('messageCreate', async message => {
             if (aiResponse) {
                 await message.reply(aiResponse);
             } else {
-                await message.reply('❌ مفتاح الذكاء الاصطناعي واجه مشكلة في الاتصال.');
+                await message.reply('❌ مفتاح الذكاء الاصطناعي غير مفعل حالياً في إعدادات Railway.');
             }
             return;
         }
 
         if (message.content.startsWith('!')) return;
-        if (ticketInfo.claimedBy) return;
 
+        // إذا التكت مستلم أو المرسل إداري لا يتلقف البوت
+        if (ticketInfo.claimedBy) return;
         const isStaff = message.member.roles.cache.has(STAFF_ROLE_ID) || message.member.permissions.has(PermissionFlagsBits.Administrator);
         if (isStaff) return;
 
@@ -169,7 +181,7 @@ client.on('messageCreate', async message => {
         return;
     }
 
-    // 3️⃣ Setup قائمة التكتات
+    // 3️⃣ Setup
     if (command === '!setup' || command === 'سيت_اب') {
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return message.reply('❌ ما عندك صلاحية!');
@@ -273,7 +285,7 @@ client.on('interactionCreate', async interaction => {
         });
 
         await interaction.update({ components: [row] });
-        await interaction.followUp({ content: `🙋‍♂️ تم استلام التكت بواسطة <@${interaction.user.id}>. (تم إيقف الرد الآلي للذكاء الاصطناعي لهذا التكت)` });
+        await interaction.followUp({ content: `🙋‍♂️ تم استلام التكت بواسطة <@${interaction.user.id}>. (تم إيقاف الرد الآلي للذكاء الاصطناعي لهذا التكت)` });
 
         const claimEmbed = new EmbedBuilder()
             .setTitle('🙋‍♂️ استلام تكت (Claim Ticket)')
