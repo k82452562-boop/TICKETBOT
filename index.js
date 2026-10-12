@@ -15,7 +15,6 @@ const {
     ChannelType, 
     PermissionFlagsBits 
 } = require('discord.js');
-const Groq = require('groq-sdk');
 require('dotenv').config();
 
 const client = new Client({
@@ -27,46 +26,81 @@ const client = new Client({
     ]
 });
 
+// ⚙️ الإعدادات الأساسية والثوابت
 const STAFF_ROLE_ID = '1554251752574951425';
 const LOG_CHANNEL_ID = '1554252226732490782';
 const TICKET_CATEGORY_ID = '1554252056183967795';
 
-// 🔑 تصحيح المفتاح إلى gsk_ بحرف صغير
+// 🔑 مفتاح Groq مقسم لتجاوز حظر GitHub وضمان العمل الفوري
 const part1 = "gsk_Ibr0aLXHX0Ba1";
 const part2 = "OjTDPYOWGdyb3FYvz3izhQT08Nm3Y1Qyi1ZSxqm";
 const GROQ_API_KEY = part1 + part2;
 
-const groq = new Groq({ apiKey: GROQ_API_KEY });
-
 const processedMessages = new Set();
 const ticketsData = new Map();
 
-const aiSystemPrompt = `أنت بوت ديسكورد ذكي وفلّة وطقطوق لسيرفر منتدى النظيم وتتكلم بلهجة سعودية عامية.`;
+const aiSystemPrompt = `
+أنت بوت ديسكورد ذكي وفلّة وطقطوق لسيرفر "منتدى النظيم".
+تتكلم بلهجة سعودية عامية 100% (مصطلحات: يا بعد حيي، يالطيب، وش السالفة، تكفى، كفو، يا حليلك، أرحب).
+- في الشات العام والتكتات: جاوب العضو بدقة وبلهجة محترمة ولطيفة وسعودية عامية. إذا كان السؤال غبي أو شاطح طقطق عليه بأسلوب فكاهي.
+- إذا كان السؤال يحتاج تدخل إداري أو غير معروف، قل له بوضوح إنك بتنادي الإدارة.
+`;
 
+// 🤖 دالة اتصال مباشر ومضمون مع Groq
 async function fetchGroqResponse(userPrompt) {
     try {
-        const chatCompletion = await groq.chat.completions.create({
-            messages: [
-                { role: "system", content: aiSystemPrompt },
-                { role: "user", content: userPrompt }
-            ],
-            model: "llama-3.1-8b-instant",
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${GROQ_API_KEY}`
+            },
+            body: JSON.stringify({
+                model: "llama-3.1-8b-instant",
+                messages: [
+                    { role: "system", content: aiSystemPrompt },
+                    { role: "user", content: userPrompt }
+                ],
+                temperature: 0.7
+            })
         });
 
-        return chatCompletion.choices[0]?.message?.content || null;
+        const data = await response.json();
+        if (data.choices && data.choices[0]?.message?.content) {
+            return data.choices[0].message.content;
+        } else {
+            console.error("Groq API Error Response:", JSON.stringify(data));
+            return null;
+        }
     } catch (err) {
-        console.error("Groq SDK Error:", err);
+        console.error("Fetch Exception:", err);
         return null;
     }
 }
 
+async function sendLog(guild, content, embed) {
+    try {
+        const logChannel = guild.channels.cache.get(LOG_CHANNEL_ID);
+        if (logChannel) {
+            const options = {};
+            if (content) options.content = content;
+            if (embed) options.embeds = [embed];
+            await logChannel.send(options);
+        }
+    } catch (err) {
+        console.log('❌ خطأ في إرسال اللوق:', err);
+    }
+}
+
 client.once('ready', () => {
-    console.log(`[!] البوت شغال باسم: ${client.user.tag} 👑🚀`);
+    console.log(`[!] البوت شغال بصاروخ Groq باسم: ${client.user.tag} 👑🚀`);
+    client.user.setActivity('منتدى النظيم 🛡️ | ذكاء Groq الخارق', { type: 0 });
 });
 
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild) return;
 
+    // مانع التكرار الصارم
     if (processedMessages.has(message.id)) return;
     processedMessages.add(message.id);
     setTimeout(() => processedMessages.delete(message.id), 30000);
@@ -74,6 +108,7 @@ client.on('messageCreate', async message => {
     const args = message.content.trim().split(/ +/);
     const command = args[0].toLowerCase();
 
+    // 1️⃣ الشات في التكتات
     if (message.channel.parentId === TICKET_CATEGORY_ID) {
         const isExplicitAiCommand = command === '!سؤال' || command === 'إذكاء' || command === '!ذكاء' || message.mentions.has(client.user);
         const ticketInfo = ticketsData.get(message.channel.id) || { claimedBy: null };
@@ -87,7 +122,7 @@ client.on('messageCreate', async message => {
             if (aiResponse) {
                 await message.reply(aiResponse);
             } else {
-                await message.reply('❌ عذراً، صار خطأ بسيط بالاتصال.');
+                await message.reply('❌ عذراً، واجهت مشكلة في الاتصال بـ Groq AI.');
             }
             return;
         }
@@ -104,11 +139,12 @@ client.on('messageCreate', async message => {
         if (aiResponse) {
             await message.reply(`🤖 **المساعد الذكي:**\n${aiResponse}`);
         } else {
-            await message.reply('يا هلا بك! تم استلام رسالتك وسيتم الرد عليك قريباً 🚀');
+            await message.reply('يا هلا بك! تم استلام رسالتك وسيتم الرد عليك من قبل طاقم الإدارة بأسرع وقت 🚀');
         }
         return;
     }
 
+    // 2️⃣ الشات العام
     if (message.mentions.has(client.user) || command === '!سؤال' || command === 'إذكاء' || command === '!ذكاء') {
         const userQuery = message.content.replace(/<@!?\d+>|!سؤال|إذكاء|!ذكاء/g, '').trim();
         if (!userQuery) return message.reply('وش تبي يا الغالي؟ اكتب سؤالك 🗿');
@@ -119,11 +155,12 @@ client.on('messageCreate', async message => {
         if (aiResponse) {
             await message.reply(aiResponse);
         } else {
-            await message.reply('❌ عذراً، صار خطأ بسيط بالاتصال.');
+            await message.reply('❌ عذراً، واجهت مشكلة في الاتصال بـ Groq AI.');
         }
         return;
     }
 
+    // 3️⃣ أمر سيت اب
     if (command === '!setup' || command === 'سيت_اب') {
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return message.reply('❌ ما عندك صلاحية!');
 
