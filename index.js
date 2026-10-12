@@ -39,13 +39,24 @@ const aiSystemPrompt = `
 - إذا كان السؤال يحتاج تدخل إداري أو غير معروف، قل له بوضوح إنك بتنادي الإدارة.
 `;
 
-// دالة الاتصال المباشر بـ Gemini API
+// دالة اتصال ذكية تدعم مفاتيح AQ. والمفاتيح التقليدية AIza
 async function fetchGeminiResponse(userPrompt) {
     const rawKey = process.env.GEMINI_API_KEY;
-    if (!rawKey) return null;
+    if (!rawKey) {
+        console.log("❌ GEMINI_API_KEY is missing");
+        return null;
+    }
 
     const apiKey = rawKey.trim();
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    let url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent`;
+    const headers = { 'Content-Type': 'application/json' };
+
+    // التحقق من نوع المفتاح (AQ أو AIza)
+    if (apiKey.startsWith('AIza')) {
+        url += `?key=${apiKey}`;
+    } else {
+        headers['Authorization'] = `Bearer ${apiKey}`;
+    }
 
     const requestBody = {
         contents: [{ parts: [{ text: `${aiSystemPrompt}\n\nسؤال المستخدم: ${userPrompt}` }] }]
@@ -54,7 +65,7 @@ async function fetchGeminiResponse(userPrompt) {
     try {
         const response = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: headers,
             body: JSON.stringify(requestBody)
         });
 
@@ -62,6 +73,7 @@ async function fetchGeminiResponse(userPrompt) {
         if (data && data.candidates && data.candidates[0]?.content?.parts[0]?.text) {
             return data.candidates[0].content.parts[0].text;
         } else {
+            console.error("❌ Gemini Error Response:", JSON.stringify(data));
             return null;
         }
     } catch (err) {
@@ -95,7 +107,6 @@ client.once('ready', () => {
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild) return;
 
-    // حظر التكرار المطلق
     if (processedMessages.has(message.id)) return;
     processedMessages.add(message.id);
     setTimeout(() => processedMessages.delete(message.id), 30000);
@@ -106,11 +117,8 @@ client.on('messageCreate', async message => {
     // 1️⃣ تفاعل التكتات الذكي
     if (message.channel.parentId === TICKET_CATEGORY_ID) {
         const isExplicitAiCommand = command === '!سؤال' || command === 'إذكاء' || command === '!ذكاء' || message.mentions.has(client.user);
-        
-        // جلب بيانات التكت
         const ticketInfo = ticketsData.get(message.channel.id) || { claimedBy: null };
 
-        // إذا أرسل العضو أو الإداري أمر صريح للبوت (!سؤال أو إذكاء)
         if (isExplicitAiCommand) {
             const userQuery = message.content.replace(/<@!?\d+>|!سؤال|إذكاء|!ذكاء/g, '').trim();
             if (!userQuery) return message.reply('اكتب سؤالك يا الغالي 🗿');
@@ -120,22 +128,17 @@ client.on('messageCreate', async message => {
             if (aiResponse) {
                 await message.reply(aiResponse);
             } else {
-                await message.reply('❌ مفتاح الذكاء الاصطناعي غير مفعل حالياً.');
+                await message.reply('❌ مفتاح الذكاء الاصطناعي واجه مشكلة في الاتصال.');
             }
             return;
         }
 
-        // إذا الرسالة تبدأ بـ ! (أمر آخر) يتجاهلها البوت
         if (message.content.startsWith('!')) return;
-
-        // 🛑 شرط الحماية: إذا التكت مستلم من إداري، البوت لا يسوي رد آلي أبداً!
         if (ticketInfo.claimedBy) return;
 
-        // 🛑 إذا اللي أرسل الرسالة إداري، البوت لا يسوي رد آلي
         const isStaff = message.member.roles.cache.has(STAFF_ROLE_ID) || message.member.permissions.has(PermissionFlagsBits.Administrator);
         if (isStaff) return;
 
-        // الرد الآلي التلقائي قبل الاستلام (للأعضاء فقط)
         await message.channel.sendTyping();
         const aiResponse = await fetchGeminiResponse(message.content);
 
@@ -238,7 +241,6 @@ client.on('interactionCreate', async interaction => {
                 ]
             });
 
-            // تسجيل التكت وحالته (غير مستلم بعد)
             ticketsData.set(ticketChannel.id, { ownerId: member.id, claimedBy: null });
 
             const controlRow = new ActionRowBuilder().addComponents(
@@ -253,12 +255,10 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // زر استلام التكت (Claim)
     if (interaction.isButton() && interaction.customId === 'claim_ticket') {
         const isStaff = interaction.member.roles.cache.has(STAFF_ROLE_ID) || interaction.member.permissions.has(PermissionFlagsBits.Administrator);
         if (!isStaff) return interaction.reply({ content: '❌ هذا الزر للإدارة فقط!', ephemeral: true });
 
-        // حفظ اسم المستلم لإيقاف الرد الآلي فوراً
         let data = ticketsData.get(interaction.channel.id);
         if (!data) {
             data = { ownerId: interaction.channel.topic || 'غير معروف', claimedBy: interaction.user.id };
@@ -273,7 +273,7 @@ client.on('interactionCreate', async interaction => {
         });
 
         await interaction.update({ components: [row] });
-        await interaction.followUp({ content: `🙋‍♂️ تم استلام التكت بواسطة <@${interaction.user.id}>. (تم إيقاف الرد الآلي للذكاء الاصطناعي لهذا التكت)` });
+        await interaction.followUp({ content: `🙋‍♂️ تم استلام التكت بواسطة <@${interaction.user.id}>. (تم إيقف الرد الآلي للذكاء الاصطناعي لهذا التكت)` });
 
         const claimEmbed = new EmbedBuilder()
             .setTitle('🙋‍♂️ استلام تكت (Claim Ticket)')
@@ -284,7 +284,6 @@ client.on('interactionCreate', async interaction => {
         await sendLog(interaction.guild, `🙋‍♂️ تم استلام التكت بواسطة: <@${interaction.user.id}>`, claimEmbed);
     }
 
-    // زر إغلاق التكت
     if (interaction.isButton() && interaction.customId === 'close_ticket') {
         await sendLog(interaction.guild, `🔒 أُغلق بواسطة: <@${interaction.user.id}>`);
         ticketsData.delete(interaction.channel.id);
