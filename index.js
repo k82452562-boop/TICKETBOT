@@ -47,7 +47,7 @@ const aiSystemPrompt = `
 - إذا كان السؤال يحتاج تدخل إداري أو غير معروف، قل له بوضوح إنك بتنادي الإدارة.
 `;
 
-// 🤖 دالة اتصال مباشرة بـ Gemini API تدعم مفاتيح AQ. والمفاتيح التقليدية
+// 🤖 دالة اتصال مباشرة بـ Gemini API تدعم جميع أنواع المفاتيح (AQ. و AIza)
 async function fetchGeminiResponse(userPrompt) {
     const rawKey = process.env.GEMINI_API_KEY;
     if (!rawKey) {
@@ -56,7 +56,6 @@ async function fetchGeminiResponse(userPrompt) {
     }
 
     const apiKey = rawKey.trim();
-    // استخدام نموذج gemini-2.5-flash المتوافق مع مفاتيح AQ الحديثة
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`;
     
     const requestBody = {
@@ -162,7 +161,7 @@ client.on('messageCreate', async message => {
         // إغفال أي أمر آخر يبدأ بـ !
         if (message.content.startsWith('!')) return;
 
-        // 🛑 إذا كان التكت مستلم من إداري، لا ينطق البوت أبداً إلا بالأمر
+        // 🛑 إذا كان التكت مستلم من إداري، لا ينطق البوت أبداً إلا بالأمر الصريح
         if (ticketInfo.claimedBy) return;
 
         // 🛑 إذا كان المرسل إداري، لا يرد البوت آلياً
@@ -200,7 +199,7 @@ client.on('messageCreate', async message => {
         return;
     }
 
-    // 3️⃣ أمر Setup الكامل لقائمة التكتات والديزاين الأصلي
+    // 3️⃣ أمر Setup لقائمة التكتات والديزاين الأصلي
     if (command === '!setup' || command === 'سيت_اب') {
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return message.reply('❌ يا طويل العمر ما عندك صلاحية تستخدم هالأمر!');
