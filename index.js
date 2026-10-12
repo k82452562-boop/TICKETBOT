@@ -33,8 +33,9 @@ const STAFF_ROLE_ID = '1554251752574951425'; // رتبة الإدارة
 const LOG_CHANNEL_ID = '1554252226732490782'; // روم لوق التكتات
 const TICKET_CATEGORY_ID = '1554252056183967795'; // كاتجوري التكتات
 
-// تهيئة مكتبة الذكاء الاصطناعي الجديدة والمتوافقة مع مفاتيح AQ.
-let aiClient = null;
+// حماية من الردود المزدوجة والمكررة
+const processedMessages = new Set();
+
 const aiSystemPrompt = `
 أنت بوت ديسكورد ذكي وفلّة وطقطوق لسيرفر "منتدى النظيم".
 تتكلم بلهجة سعودية عامية 100% (مصطلحات: يا بعد حيي، يالطيب، وش السالفة، تكفى، كفو، يا حليلك، أرحب).
@@ -42,13 +43,41 @@ const aiSystemPrompt = `
 - إذا كان السؤال يحتاج تدخل إداري أو غير معروف، قل له بوضوح إنك بتنادي الإدارة.
 `;
 
-if (process.env.GEMINI_API_KEY) {
+// دالة الاتصال المباشر بـ Gemini API لدعم مفاتيح AQ. والمفاتيح التقليدية
+async function fetchGeminiResponse(userPrompt) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) return null;
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey.trim()}`;
+
+    const requestBody = {
+        system_instruction: {
+            parts: [{ text: aiSystemPrompt }]
+        },
+        contents: [
+            {
+                parts: [{ text: userPrompt }]
+            }
+        ]
+    };
+
     try {
-        const { GoogleGenAI } = require('@google/genai');
-        aiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-        console.log("[+] تم تفعيل مكتبة الذكاء الاصطناعي الجديدة بنجاح!");
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody)
+        });
+
+        const data = await response.json();
+        if (data && data.candidates && data.candidates[0]?.content?.parts[0]?.text) {
+            return data.candidates[0].content.parts[0].text;
+        } else {
+            console.error("Gemini API Error details:", JSON.stringify(data));
+            return null;
+        }
     } catch (err) {
-        console.log("❌ فشل تشغيل مكتبة الذكاء الاصطناعي:", err.message);
+        console.error("Gemini Fetch Exception:", err);
+        return null;
     }
 }
 
@@ -75,40 +104,34 @@ client.once('ready', () => {
     client.user.setActivity('منتدى النظيم 🛡️ | الذكاء السعودي المطور', { type: 0 });
 });
 
-// 📩 الاستجابة التلقائية في التكتات والشات العام
+// 📩 الاستجابة التلقائية ومنع التكرار
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild) return;
+
+    // منع المعالجة المزدوجة للرسالة المحددة
+    if (processedMessages.has(message.id)) return;
+    processedMessages.add(message.id);
+    setTimeout(() => processedMessages.delete(message.id), 60000);
 
     const args = message.content.trim().split(/ +/);
     const command = args[0].toLowerCase();
 
-    // 1️⃣ الرد التلقائي الفوري على أي رسالة يكتبها العضو داخل روم التكت بدون الحاجة لأمر!
+    // 1️⃣ الرد التلقائي الفوري داخل التكتات بدون أمر
     if (message.channel.parentId === TICKET_CATEGORY_ID) {
         if (message.content.startsWith('!')) return;
 
-        if (aiClient) {
-            await message.channel.sendTyping();
-            try {
-                const response = await aiClient.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: message.content,
-                    config: {
-                        systemInstruction: aiSystemPrompt
-                    }
-                });
-                const aiText = response.text || "يا هلا بك! جاري تحويل طلبك لطاقم الإدارة للرد عليك بأسرع وقت 🚀";
-                await message.reply(`🤖 **المساعد الذكي:**\n${aiText}`);
-            } catch (err) {
-                console.error("خطأ الذكاء الاصطناعي:", err);
-                await message.reply('يا هلا بك! جاري تحويل طلبك لطاقم الإدارة للرد عليك بأسرع وقت 🚀');
-            }
+        await message.channel.sendTyping();
+        const aiResponse = await fetchGeminiResponse(`سؤال العضو في التكت: "${message.content}"`);
+
+        if (aiResponse) {
+            await message.reply(`🤖 **المساعد الذكي:**\n${aiResponse}`);
         } else {
             await message.reply('يا هلا بك! تم استلام رسالتك وسيتم الرد عليك من قبل طاقم الإدارة بأسرع وقت 🚀');
         }
         return;
     }
 
-    // 2️⃣ الذكاء الاصطناعي في الشات العام (!سؤال / إذكاء / منشن)
+    // 2️⃣ الذكاء الاصطناعي في الشات العام (!سؤال / إذكاء / منشن للبوت)
     if (message.mentions.has(client.user) || command === '!سؤال' || command === 'إذكاء' || command === '!ذكاء') {
         const userQuery = message.content.replace(/<@!?\d+>|!سؤال|إذكاء|!ذكاء/g, '').trim();
 
@@ -116,23 +139,13 @@ client.on('messageCreate', async message => {
             return message.reply('وش تبي يا الغالي؟ اكتب سؤالك مو تسوي لي منشن فاضي 🗿');
         }
 
-        if (!aiClient) {
-            return message.reply('❌ مفتاح الذكاء الاصطناعي غير مفعل حالياً في إعدادات Railway.');
-        }
-
         await message.channel.sendTyping();
-        try {
-            const response = await aiClient.models.generateContent({
-                model: 'gemini-2.5-flash',
-                contents: userQuery,
-                config: {
-                    systemInstruction: aiSystemPrompt
-                }
-            });
-            await message.reply(response.text || 'أبشرك الذكاء عندي فصل، جرب تسألني بعد شوي 🌚');
-        } catch (err) {
-            console.error(err);
-            await message.reply('أبشرك الذكاء عندي فصل، جرب تسألني بعد شوي 🌚');
+        const aiResponse = await fetchGeminiResponse(userQuery);
+
+        if (aiResponse) {
+            await message.reply(aiResponse);
+        } else {
+            await message.reply('❌ مفتاح الذكاء الاصطناعي غير مفعل حالياً أو فيه مشكلة في الإعدادات بـ Railway.');
         }
         return;
     }
