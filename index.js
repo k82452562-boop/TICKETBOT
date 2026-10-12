@@ -26,9 +26,13 @@ const client = new Client({
     ]
 });
 
+// ⚙️ الإعدادات الأساسية والثوابت
 const STAFF_ROLE_ID = '1554251752574951425';
 const LOG_CHANNEL_ID = '1554252226732490782';
 const TICKET_CATEGORY_ID = '1554252056183967795';
+
+// 🔑 مفتاح Groq المباشر في الكود
+const GROQ_API_KEY = "Gsk_xdp5oajBHtYosx3ekegMWGdyb3FYlG0L5uS4k7yoKdTde5REYiUL";
 
 const processedMessages = new Set();
 const ticketsData = new Map();
@@ -40,14 +44,8 @@ const aiSystemPrompt = `
 - إذا كان السؤال يحتاج تدخل إداري أو غير معروف، قل له بوضوح إنك بتنادي الإدارة.
 `;
 
-// 🤖 دالة الاتصال بـ Groq API السريع والذكي
+// 🤖 دالة الاتصال بـ Groq API باستخدام المفتاح المباشر
 async function fetchGroqResponse(userPrompt) {
-    const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey) {
-        console.log("❌ GROQ_API_KEY غير موجود في إعدادات Railway");
-        return null;
-    }
-
     const url = 'https://api.groq.com/openai/v1/chat/completions';
     
     const requestBody = {
@@ -64,7 +62,7 @@ async function fetchGroqResponse(userPrompt) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey.trim()}`
+                'Authorization': `Bearer ${GROQ_API_KEY}`
             },
             body: JSON.stringify(requestBody)
         });
@@ -97,7 +95,7 @@ async function sendLog(guild, content, embed) {
 }
 
 client.once('ready', () => {
-    console.log(`[!] البوت شغال بقوة Groq باسم: ${client.user.tag} 👑🚀`);
+    console.log(`[!] البوت شغال بصاروخ Groq باسم: ${client.user.tag} 👑🚀`);
     client.user.setActivity('منتدى النظيم 🛡️ | ذكاء Groq الخارق', { type: 0 });
 });
 
