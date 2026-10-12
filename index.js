@@ -17,19 +17,31 @@ const {
     Collection
 } = require('discord.js');
 
-const Database = require('better-sqlite3');
-const db = new Database('tickets.db');
+const fs = require('fs');
 
-// تجهيز قاعدة البيانات لحفظ حالة التكتات
-db.exec(`
-    CREATE TABLE IF NOT EXISTS active_tickets (
-        channel_id TEXT PRIMARY KEY,
-        owner_id TEXT,
-        category TEXT,
-        claimed_by TEXT,
-        added_users TEXT
-    )
-`);
+// نظام حفظ التكتات في ملف محلي لمنع أخطاء البناء
+const DB_FILE = './tickets_data.json';
+if (!fs.existsSync(DB_FILE)) {
+    fs.writeFileSync(DB_FILE, JSON.stringify({}));
+}
+
+function getTicketsData() {
+    try {
+        return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+    } catch {
+        return {};
+    }
+}
+
+function saveTicketData(channelId, data) {
+    const db = getTicketsData();
+    if (data === null) {
+        delete db[channelId];
+    } else {
+        db[channelId] = data;
+    }
+    fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
+}
 
 const client = new Client({
     intents: [
@@ -50,7 +62,6 @@ const CONFIG = {
 
 const cooldowns = new Collection();
 
-// دالة تسجيل الأحداث واللوق
 async function sendLog(guild, embed) {
     try {
         const logChannel = guild.channels.cache.get(CONFIG.LOG_CHANNEL_ID);
@@ -66,11 +77,10 @@ client.once('ready', () => {
     console.log(`[SYSTEM] البوت شغال وجاهز يا طويل العمر باسم: ${client.user.tag}`);
 });
 
-// === الأوامر النصية وتجهيز القوائم ===
+// === الأوامر النصية ===
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
 
-    // 1. أمر !setup
     if (message.content === '!setup') {
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return message.reply('ما عندك صلاحية تستخدم هالأمر يا طويل العمر!').then(m => setTimeout(() => m.delete().catch(() => {}), 4000));
@@ -122,7 +132,7 @@ client.on('messageCreate', async (message) => {
         return;
     }
 
-    // 2. أوامر الباند المخصصة
+    // أوامر الباند المخصصة
     const customBans = [
         'بنعالي', '!بنعالي', 
         'بنعال_براء', '!بنعال_براء', 
@@ -157,10 +167,9 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-// === إدارة التفاعلات (Interactions) ===
+// === إدارة التفاعلات ===
 client.on('interactionCreate', async (interaction) => {
 
-    // 1. القائمة المنسدلة -> فتح Modal
     if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_select') {
         const val = interaction.values[0];
 
@@ -168,8 +177,9 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.reply({ content: '🔄 تم تفريغ الاختيار بنجاح.', ephemeral: true });
         }
 
-        const existingTicket = db.prepare('SELECT channel_id FROM active_tickets WHERE owner_id = ? AND category = ?').get(interaction.user.id, val);
-        if (existingTicket && interaction.guild.channels.cache.has(existingTicket.channel_id)) {
+        const db = getTicketsData();
+        const hasOpenTicket = Object.values(db).some(t => t.owner_id === interaction.user.id && t.category === val);
+        if (hasOpenTicket) {
             return interaction.reply({ content: '❌ يا غالي عندك تكت مفتوح أصلاً في هذا القسم!', ephemeral: true });
         }
 
@@ -201,7 +211,6 @@ client.on('interactionCreate', async (interaction) => {
         await interaction.showModal(modal);
     }
 
-    // 2. استقبال Modal وإنشاء التكت
     if (interaction.isModalSubmit() && interaction.customId.startsWith('ticket_modal_')) {
         const categoryKey = interaction.customId.replace('ticket_modal_', '');
         const subject = interaction.fields.getTextInputValue('ticket_subject');
@@ -229,9 +238,12 @@ client.on('interactionCreate', async (interaction) => {
                 ]
             });
 
-            db.prepare('INSERT INTO active_tickets (channel_id, owner_id, category, claimed_by, added_users) VALUES (?, ?, ?, ?, ?)').run(
-                ticketChannel.id, interaction.user.id, catName, null, JSON.stringify([])
-            );
+            saveTicketData(ticketChannel.id, {
+                owner_id: interaction.user.id,
+                category: catName,
+                claimed_by: null,
+                added_users: []
+            });
 
             const rulesText = 
                 "📌 **قوانين وتعليمات التكت:**\n" +
@@ -271,21 +283,23 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
 
-    // 3. أزرار التحكم بالتكت
     if (interaction.isButton()) {
         const { customId, channel, member, guild } = interaction;
         const isStaff = member.roles.cache.has(CONFIG.STAFF_ROLE_ID) || member.permissions.has(PermissionFlagsBits.Administrator);
 
-        // --- زر الاستلام ---
         if (customId === 'ticket_claim') {
             if (!isStaff) return interaction.reply({ content: '❌ هذا الزر مخصص لرجال الإدارة فقط!', ephemeral: true });
 
-            const ticketData = db.prepare('SELECT * FROM active_tickets WHERE channel_id = ?').get(channel.id);
+            const db = getTicketsData();
+            const ticketData = db[channel.id];
             if (ticketData && ticketData.claimed_by) {
                 return interaction.reply({ content: `❌ التكت مستلمة أصلاً بواسطة <@${ticketData.claimed_by}>`, ephemeral: true });
             }
 
-            db.prepare('UPDATE active_tickets SET claimed_by = ? WHERE channel_id = ?').run(member.id, channel.id);
+            if (ticketData) {
+                ticketData.claimed_by = member.id;
+                saveTicketData(channel.id, ticketData);
+            }
 
             await channel.permissionOverwrites.edit(CONFIG.STAFF_ROLE_ID, { ViewChannel: true, SendMessages: false });
             await channel.permissionOverwrites.edit(member.id, { ViewChannel: true, SendMessages: true, ReadMessageHistory: true });
@@ -307,7 +321,6 @@ client.on('interactionCreate', async (interaction) => {
             await sendLog(guild, log);
         }
 
-        // --- زر إضافة عضو ---
         if (customId === 'ticket_add') {
             if (!isStaff) return interaction.reply({ content: '❌ هذا الخيار للإدارة فقط.', ephemeral: true });
 
@@ -329,16 +342,17 @@ client.on('interactionCreate', async (interaction) => {
                 await m.delete().catch(() => {});
                 await channel.send({ content: `✅ أبشر، تم إضافة العضو <@${target.id}> للتكت بواسطة <@${member.id}>.` });
 
-                const ticketData = db.prepare('SELECT added_users FROM active_tickets WHERE channel_id = ?').get(channel.id);
+                const db = getTicketsData();
+                const ticketData = db[channel.id];
                 if (ticketData) {
-                    const list = JSON.parse(ticketData.added_users || '[]');
-                    if (!list.includes(target.id)) list.push(target.id);
-                    db.prepare('UPDATE active_tickets SET added_users = ? WHERE channel_id = ?').run(JSON.stringify(list), channel.id);
+                    if (!ticketData.added_users.includes(target.id)) {
+                        ticketData.added_users.push(target.id);
+                        saveTicketData(channel.id, ticketData);
+                    }
                 }
             });
         }
 
-        // --- استدعاء العضو ---
         if (customId === 'ticket_ping_user') {
             if (!isStaff) return interaction.reply({ content: '❌ هذا الخيار للإدارة فقط.', ephemeral: true });
 
@@ -348,10 +362,9 @@ client.on('interactionCreate', async (interaction) => {
             await interaction.reply({ content: `🔔 يا <@${ownerId}>، لاهنت ارجع للتكت! استدعاء من الإداري: <@${member.id}>` });
         }
 
-        // --- استدعاء الإدارة ---
         if (customId === 'ticket_ping_staff') {
             const now = Date.now();
-            const cooldownAmount = 180000; // كولد داون 3 دقائق
+            const cooldownAmount = 180000;
 
             if (cooldowns.has(channel.id)) {
                 const expirationTime = cooldowns.get(channel.id) + cooldownAmount;
@@ -365,7 +378,6 @@ client.on('interactionCreate', async (interaction) => {
             await interaction.reply({ content: `📢 يا إخوان <@&${CONFIG.STAFF_ROLE_ID}>، مطلوب حضوركم للتكت من قبل: <@${member.id}>!` });
         }
 
-        // --- إغلاق التكت ---
         if (customId === 'ticket_close_modal') {
             const modal = new ModalBuilder()
                 .setCustomId('ticket_close_reason_modal')
@@ -384,13 +396,13 @@ client.on('interactionCreate', async (interaction) => {
         }
     }
 
-    // 4. معالجة Modal الإغلاق
     if (interaction.isModalSubmit() && interaction.customId === 'ticket_close_reason_modal') {
         const reason = interaction.fields.getTextInputValue('close_reason') || 'بدون ذكر سبب';
         const channel = interaction.channel;
 
-        const ticketData = db.prepare('SELECT * FROM active_tickets WHERE channel_id = ?').get(channel.id) || {};
-        const addedList = ticketData.added_users ? JSON.parse(ticketData.added_users) : [];
+        const db = getTicketsData();
+        const ticketData = db[channel.id] || {};
+        const addedList = ticketData.added_users || [];
         const addedFormatted = addedList.length > 0 ? addedList.map(id => `<@${id}>`).join(', ') : 'لا يوجد';
 
         const closeLogEmbed = new EmbedBuilder()
@@ -408,7 +420,7 @@ client.on('interactionCreate', async (interaction) => {
             .setTimestamp();
 
         await sendLog(interaction.guild, closeLogEmbed);
-        db.prepare('DELETE FROM active_tickets WHERE channel_id = ?').run(channel.id);
+        saveTicketData(channel.id, null);
 
         await interaction.reply({ content: '🔒 تم، بيتم حذف وقفل التكت خلال 3 ثوانٍ...' });
 
