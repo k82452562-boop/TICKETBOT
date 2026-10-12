@@ -33,9 +33,6 @@ const STAFF_ROLE_ID = '1554251752574951425'; // رتبة الإدارة
 const LOG_CHANNEL_ID = '1554252226732490782'; // روم لوق التكتات
 const TICKET_CATEGORY_ID = '1554252056183967795'; // كاتجوري التكتات
 
-// 🔑 مفتاح الذكاء الاصطناعي مضمن مباشرة هنا
-const GEMINI_API_KEY = "AQ.Ab8RN6IuBCgIAevFZTyiy9B9V8GUKUQYtTCezN-ynmKA8R2zqw";
-
 // مانع التكرار المطلق للرسائل
 const processedMessages = new Set();
 
@@ -50,13 +47,15 @@ const aiSystemPrompt = `
 - إذا كان السؤال يحتاج تدخل إداري أو غير معروف، قل له بوضوح إنك بتنادي الإدارة.
 `;
 
-// 🤖 دالة اتصال مباشرة بـ Gemini API باستخدام المفتاح المضمن
+// 🤖 دالة الاتصال بـ Gemini API تقرأ من Railway بذكاء وأمان
 async function fetchGeminiResponse(userPrompt) {
-    if (!GEMINI_API_KEY) {
-        console.log("❌ مفتاح الذكاء الاصطناعي غير موجود في الكود");
+    const rawKey = process.env.GEMINI_API_KEY;
+    if (!rawKey) {
+        console.log("❌ GEMINI_API_KEY غير موجود في إعدادات Railway");
         return null;
     }
 
+    const apiKey = rawKey.trim();
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`;
     
     const requestBody = {
@@ -71,16 +70,26 @@ async function fetchGeminiResponse(userPrompt) {
     };
 
     try {
-        const response = await fetch(url, {
+        let response = await fetch(url, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${GEMINI_API_KEY.trim()}`
+                'Authorization': `Bearer ${apiKey}`
             },
             body: JSON.stringify(requestBody)
         });
 
-        const data = await response.json();
+        let data = await response.json();
+
+        if (!data || !data.candidates) {
+            const altUrl = `${url}?key=${apiKey}`;
+            response = await fetch(altUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody)
+            });
+            data = await response.json();
+        }
 
         if (data && data.candidates && data.candidates[0]?.content?.parts[0]?.text) {
             return data.candidates[0].content.parts[0].text;
@@ -132,7 +141,6 @@ client.on('messageCreate', async message => {
         const isExplicitAiCommand = command === '!سؤال' || command === 'إذكاء' || command === '!ذكاء' || message.mentions.has(client.user);
         const ticketInfo = ticketsData.get(message.channel.id) || { claimedBy: null };
 
-        // إذا كتب العضو أو الإداري أمر صريح للذكاء
         if (isExplicitAiCommand) {
             const userQuery = message.content.replace(/<@!?\d+>|!سؤال|إذكاء|!ذكاء/g, '').trim();
             if (!userQuery) return message.reply('اكتب سؤالك يا الغالي 🗿');
@@ -142,22 +150,18 @@ client.on('messageCreate', async message => {
             if (aiResponse) {
                 await message.reply(aiResponse);
             } else {
-                await message.reply('❌ واجهت مشكلة في الاتصال بـ Gemini API.');
+                await message.reply('❌ مفتاح الذكاء الاصطناعي غير مفعل حالياً في إعدادات Railway.');
             }
             return;
         }
 
-        // إغفال أي أمر آخر يبدأ بـ !
         if (message.content.startsWith('!')) return;
 
-        // 🛑 إذا كان التكت مستلم من إداري، لا ينطق البوت أبداً إلا بالأمر الصريح
         if (ticketInfo.claimedBy) return;
 
-        // 🛑 إذا كان المرسل إداري، لا يرد البوت آلياً
         const isStaff = message.member.roles.cache.has(STAFF_ROLE_ID) || message.member.permissions.has(PermissionFlagsBits.Administrator);
         if (isStaff) return;
 
-        // الرد التلقائي الآلي للعضو قبل استلام التكت
         await message.channel.sendTyping();
         const aiResponse = await fetchGeminiResponse(message.content);
 
@@ -183,7 +187,7 @@ client.on('messageCreate', async message => {
         if (aiResponse) {
             await message.reply(aiResponse);
         } else {
-            await message.reply('❌ واجهت مشكلة في الاتصال بـ Gemini API.');
+            await message.reply('❌ مفتاح الذكاء الاصطناعي غير مفعل حالياً في إعدادات Railway.');
         }
         return;
     }
@@ -358,7 +362,6 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // زر استلام التكت (Claim Ticket)
     if (interaction.isButton() && interaction.customId === 'claim_ticket') {
         const isStaff = interaction.member.roles.cache.has(STAFF_ROLE_ID) || interaction.member.permissions.has(PermissionFlagsBits.Administrator);
         if (!isStaff) return interaction.reply({ content: '❌ هذا الزر مخصص لطاقم الإدارة فقط!', ephemeral: true });
@@ -388,12 +391,10 @@ client.on('interactionCreate', async interaction => {
         await sendLog(interaction.guild, `🙋‍♂️ تم استلام التكت بواسطة: <@${interaction.user.id}>`, claimEmbed);
     }
 
-    // زر استدعاء الإدارة
     if (interaction.isButton() && interaction.customId === 'summon_staff') {
         await interaction.reply({ content: `📢 <@&${STAFF_ROLE_ID}>، تم استدعاء الإدارة بواسطة <@${interaction.user.id}>!` });
     }
 
-    // زر إغلاق التكت
     if (interaction.isButton() && interaction.customId === 'close_ticket') {
         const channel = interaction.channel;
         const data = ticketsData.get(channel.id) || { ownerId: channel.topic || 'غير معروف', claimedBy: null };
