@@ -1,7 +1,7 @@
 {
-  "name": "ticket-bot-groq",
-  "version": "2.0.0",
-  "description": "Saudi Discord Ticket Bot",
+  "name": "ticket-bot-clean",
+  "version": "1.0.0",
+  "description": "Discord Ticket Bot for NZ Server",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
