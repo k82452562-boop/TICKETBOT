@@ -1,4 +1,4 @@
-// تشغيل الخادم الوهمي أولاً للبقاء أونلاين 24 ساعة
+// تشغيل الخادم الوهمي للبقاء أونلاين 24 ساعة
 require('./server.js');
 
 const { 
@@ -12,6 +12,7 @@ const {
     ChannelType, 
     PermissionFlagsBits 
 } = require('discord.js');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 require('dotenv').config();
 
 const client = new Client({
@@ -23,10 +24,23 @@ const client = new Client({
     ]
 });
 
-// ⚙️ الإعدادات الأساسية (تم تثبيت رتبة الإدارة الجديدة)
+// ⚙️ الإعدادات الأساسية (الآديهات الرسمية الخاصة بك)
 const STAFF_ROLE_ID = '1554251752574951425'; // رتبة الإدارة الجديدة
 const LOG_CHANNEL_ID = '1554252226732490782'; // روم لوق التكتات
 const TICKET_CATEGORY_ID = '1554252056183967795'; // كاتجوري التكتات
+
+// تهيئة الذكاء الاصطناعي (Gemini AI)
+const genAI = process.env.GEMINI_API_KEY ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY) : null;
+
+// شخصية البوت الذكي بالطقطقة واللهجة السعودية
+const aiSystemPrompt = `
+أنت بوت ديسكورد ذكي وفلّة وطقطوق لسيرفر "منتدى النظيم".
+تتكلم بلهجة سعودية عامية 100% (مصطلحات: يا بعد حيي، يالطيب، وش السالفة، تكفى، كفو، يا حليلك، أرحب).
+- في الشات العام: إذا سألك أحد سؤال غبي أو بديهي، طقطق عليه بأسلوب فكاهي وسريع قبل تجاوبه.
+- في التكتات والدعم الفني: حاول تساعد العضو بدقة وبلهجة محترمة ولطيفة. إذا السؤال ما تعرفه أو يحتاج تدخل إداري بشر، قل له بكل بساطة إنك بتنادي الإدارة.
+`;
+
+const aiModel = genAI ? genAI.getGenerativeModel({ model: "gemini-1.5-flash", systemInstruction: aiSystemPrompt }) : null;
 
 // الذاكرة المؤقتة للتكتات والتحذيرات
 const ticketsData = new Map();
@@ -48,18 +62,94 @@ async function sendLog(guild, content, embed) {
 }
 
 client.once('ready', () => {
-    console.log(`[!] ارحب تراحيب المطر! البوت الخارق شغال وبأعلى أداء باسم: ${client.user.tag} 👑🚀`);
-    client.user.setActivity('منتدى النظيم 🛡️ | النظام الملكي المطور', { type: 0 });
+    console.log(`[!] ارحب تراحيب المطر! البوت الخارق والذكاء الاصطناعي شغالين باسم: ${client.user.tag} 👑🚀`);
+    client.user.setActivity('منتدى النظيم 🛡️ | الذكاء السعودي المطور', { type: 0 });
 });
 
-// 📩 نظام الأوامر النصية العامي والتفاعلي الخارق
+// 📩 التعامل مع الأوامر والتفاعلات النصية والذكية
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild) return;
 
     const args = message.content.trim().split(/ +/);
     const command = args[0].toLowerCase();
 
-    // 1️⃣ أمر Setup قائمة التكتات بتصميم أسطوري
+    // 1️⃣ تفاعل الذكاء الاصطناعي داخل التكتات تلقائياً (التكفل بالدعم)
+    if (message.channel.parentId === TICKET_CATEGORY_ID && !message.content.startsWith('!')) {
+        const ticketInfo = ticketsData.get(message.channel.id);
+        
+        // إذا الرسالة من صاحب التكت ولم يتم الرد عليه بالذكاء الاصطناعي بعد
+        if (ticketInfo && message.author.id === ticketInfo.ownerId && !ticketInfo.aiResponded) {
+            ticketInfo.aiResponded = true; // كي لا يكرر الرد التلقائي
+
+            if (aiModel) {
+                await message.channel.sendTyping();
+                try {
+                    // البحث في محتوى رومات السيرفر النصية (مثل رومات الشروط والقوانين)
+                    let serverContext = "";
+                    const textChannels = message.guild.channels.cache.filter(c => c.type === ChannelType.GuildText && c.id !== message.channel.id);
+                    
+                    for (const [id, ch] of textChannels) {
+                        if (ch.permissionsFor(message.guild.members.me).has(PermissionFlagsBits.ReadMessageHistory)) {
+                            const lastMsgs = await ch.messages.fetch({ limit: 5 }).catch(() => null);
+                            if (lastMsgs) {
+                                serverContext += `\n[محتوى من روم ${ch.name}]: ` + lastMsgs.map(m => m.content).join(" | ");
+                            }
+                        }
+                    }
+
+                    const prompt = `
+سؤال العضو في التكت: "${message.content}"
+معلومات إضافية من رومات السيرفر:
+${serverContext.slice(0, 1500)}
+
+المطلوب:
+إذا كان السؤال بسيط وموجود بالمعلومات أعلاه، جاوب العضو فوراً بلهجة سعودية عامية لطيفة ومباشرة.
+إذا كان السؤال يحتاج تدخل إداري أو غير معروف، رد عليه بـ: "NEED_STAFF" متضمنة مع رسالة ترحيبية وتقول له إنك بتنادي الإدارة.
+`;
+
+                    const result = await aiModel.generateContent(prompt);
+                    const aiText = result.response.text();
+
+                    if (aiText.includes("NEED_STAFF")) {
+                        const cleanMsg = aiText.replace("NEED_STAFF", "").trim();
+                        await message.reply(cleanMsg || "يا هلا بك! موضوعك يبيله تدخل طاقم الإدارة، أبشر بعزك تم إشعارهم وسيتم الرد عليك فوراً 🚀");
+                        await message.channel.send(`📢 <@&${STAFF_ROLE_ID}>، استدعاء آلي للتكت! العضو ينظر المساعدة.`);
+                    } else {
+                        await message.reply(`🤖 **المساعد الذكي:**\n${aiText}\n\n*(إذا إجابتي ما كفتك، اضغط على زر "📢 إشعار طاقم الإدارة" تحت ويوصلونك بأسرع وقت!)*`);
+                    }
+
+                } catch (err) {
+                    console.error("خطأ في ذكاء التكت:", err);
+                }
+            }
+            return;
+        }
+    }
+
+    // 2️⃣ الذكاء الاصطناعي في الشات العام والطقطقة (!سؤال أو منشن للبوت)
+    if (message.mentions.has(client.user) || command === '!سؤال' || command === '!ذكاء') {
+        const userQuery = message.content.replace(/<@!?\d+>|!سؤال|!ذكاء/g, '').trim();
+
+        if (!userQuery) {
+            return message.reply('وش تبي يا الغالي؟ اكتب سؤالك مو تسوي لي منشن فاضي 🗿');
+        }
+
+        if (!aiModel) {
+            return message.reply('❌ مفتاح الذكاء الاصطناعي غير مفعل حالياً لدى الإدارة.');
+        }
+
+        await message.channel.sendTyping();
+        try {
+            const result = await aiModel.generateContent(userQuery);
+            await message.reply(result.response.text());
+        } catch (err) {
+            console.error(err);
+            await message.reply('أبشرك الذكاء عندي فصل، جرب تسألني بعد شوي 🌚');
+        }
+        return;
+    }
+
+    // 3️⃣ أمر Setup قائمة التكتات بتصميم أسطوري
     if (command === '!setup' || command === 'سيت_اب') {
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return message.reply('❌ يا طويل العمر ما عندك صلاحية تستخدم هالأمر!');
@@ -79,14 +169,14 @@ client.on('messageCreate', async message => {
 ▫️ **1. اطرح مشكلتك فوراً:** أول ما تفتح التكت اكتب موضوعك وتفاصيلك كاملة بدون انتظار.
 ▫️ **2. يمنع الاستهبال والتجربة:** فتح التكت بدون سبب جدي يحرّمك من الخدمة وقد يعرّضك للباند 👞.
 ▫️ **3. الاحترام المتبادل:** التعامل الأنيق يسرّع من إنجاز طلبك.
-▫️ **4. التزام الصبر:** الإدارة متواجدة وستقوم بالرد عليك بأقرب وقت.
+▫️ **4. التزام الصبر:** المساعد الذكي والإدارة متواجدون لخدمتك بأقرب وقت.
 
 ─── ･ ｡ﾟ☆: *.☽ .* :☆ﾟ. ───
 ✨ **اختر القسم المناسب لك من القائمة تحت 👇**
             `)
             .setColor('#FFD700') // ذهبي فخم
             .setThumbnail(message.guild.iconURL({ dynamic: true }))
-            .setFooter({ text: 'نظام الدعم الآلي الفاخر • منتدى النظيم', iconURL: client.user.displayAvatarURL() })
+            .setFooter({ text: 'نظام الدعم الآلي الفاخر والذكاء الاصطناعي • منتدى النظيم', iconURL: client.user.displayAvatarURL() })
             .setTimestamp();
 
         const menuRow = new ActionRowBuilder().addComponents(
@@ -126,7 +216,7 @@ client.on('messageCreate', async message => {
         return;
     }
 
-    // 2️⃣ أوامر الباند الفاخرة (تعمل بـ ! وبدون !)
+    // 4️⃣ أوامر الباند الفاخرة
     const banCommands = [
         'بنعالي', '!بنعالي', 
         'بنعال_براء', '!بنعال_براء', 
@@ -164,7 +254,7 @@ client.on('messageCreate', async message => {
         return;
     }
 
-    // 3️⃣ أمر مسح الشات (مسح / clear)
+    // 5️⃣ أمر مسح الشات (مسح / clear)
     if (command === 'مسح' || command === '!clear' || command === 'clear') {
         if (!message.member.permissions.has(PermissionFlagsBits.ManageMessages)) {
             return message.reply('❌ ما عندك صلاحية مسح الرسائل!');
@@ -181,7 +271,7 @@ client.on('messageCreate', async message => {
         return;
     }
 
-    // 4️⃣ أمر كتم العضو (اسكت / timeout)
+    // 6️⃣ أمر كتم العضو (اسكت / timeout)
     if (command === 'اسكت' || command === '!timeout' || command === 'timeout') {
         if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
             return message.reply('❌ ما عندك صلاحية لكتم الأعضاء!');
@@ -200,7 +290,7 @@ client.on('messageCreate', async message => {
         return;
     }
 
-    // 5️⃣ أمر كارت حساب العضو (معلومات / userinfo / profile)
+    // 7️⃣ أمر كارت حساب العضو (معلومات / userinfo / profile)
     if (command === 'معلومات' || command === 'بروفايل' || command === '!userinfo') {
         const target = message.mentions.members.first() || message.member;
         
@@ -222,7 +312,7 @@ client.on('messageCreate', async message => {
         return;
     }
 
-    // 6️⃣ أمر إحصائيات السيرفر (السيرفر / server)
+    // 8️⃣ أمر إحصائيات السيرفر (السيرفر / server)
     if (command === 'السيرفر' || command === '!server' || command === 'server') {
         const serverEmbed = new EmbedBuilder()
             .setTitle(`📊 إحصائيات سيرفر: ${message.guild.name}`)
@@ -241,7 +331,7 @@ client.on('messageCreate', async message => {
         return;
     }
 
-    // 7️⃣ أمر قياس البينغ والسرعة (بينغ / ping)
+    // 9️⃣ أمر قياس البينغ والسرعة (بينغ / ping)
     if (command === 'بينغ' || command === '!ping' || command === 'ping') {
         const msg = await message.reply('⚡ جاري قياس سرعة الاستجابة...');
         const ping = msg.createdTimestamp - message.createdTimestamp;
@@ -250,7 +340,7 @@ client.on('messageCreate', async message => {
     }
 });
 
-// 🛠️ التعامل مع التفاعلات والأزرار القوية
+// 🛠️ التعامل مع التفاعلات والأزرار
 client.on('interactionCreate', async interaction => {
 
     // 1️⃣ القائمة المنسدلة للتكتات
@@ -266,22 +356,13 @@ client.on('interactionCreate', async interaction => {
 
         let categoryName = 'دعم';
         let categoryColor = '#FFD700';
-        if (selectedValue === 'support_ticket') {
-            categoryName = 'دعم فني';
-            categoryColor = '#FF3366';
-        } else if (selectedValue === 'general_ticket') {
-            categoryName = 'استفسار عام';
-            categoryColor = '#00FFCC';
-        } else if (selectedValue === 'store_ticket') {
-            categoryName = 'متجر وشراء';
-            categoryColor = '#FFCC00';
-        }
+        if (selectedValue === 'support_ticket') { categoryName = 'دعم فني'; categoryColor = '#FF3366'; }
+        else if (selectedValue === 'general_ticket') { categoryName = 'استفسار عام'; categoryColor = '#00FFCC'; }
+        else if (selectedValue === 'store_ticket') { categoryName = 'متجر وشراء'; categoryColor = '#FFCC00'; }
 
         const channelName = `ticket-${categoryName}-${member.user.username}`.toLowerCase();
         const existingChannel = guild.channels.cache.find(c => c.name === channelName);
-        if (existingChannel) {
-            return interaction.reply({ content: '❌ يا بعدي عندك تكت مفتوح بالفعل بهذا القسم!', ephemeral: true });
-        }
+        if (existingChannel) return interaction.reply({ content: '❌ عندك تكت مفتوح بالفعل بهذا القسم!', ephemeral: true });
 
         await interaction.deferReply({ ephemeral: true });
 
@@ -294,7 +375,7 @@ client.on('interactionCreate', async interaction => {
                 permissionOverwrites: [
                     { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
                     { id: member.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
-                    { id: STAFF_ROLE_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }, // رتبة الإدارة الجديدة
+                    { id: STAFF_ROLE_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
                     { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] }
                 ],
             });
@@ -303,39 +384,23 @@ client.on('interactionCreate', async interaction => {
                 ownerId: member.id,
                 category: categoryName,
                 claimedBy: null,
-                addedUsers: []
+                addedUsers: [],
+                aiResponded: false
             });
 
             const welcomeEmbed = new EmbedBuilder()
                 .setTitle(`🎫 تكت جديد | قسم: ${categoryName}`)
-                .setDescription(`يا هلا والله ومسهلا بك يا <@${member.id}>!\n\n**الرجاء كتابة طلبك أو مشكلتك فوراً بدون الانتظار.**\nطاقم الإدارة تلقى الإشعار وسيقوم بالرد عليك بأسرع وقت 🚀`)
-                .setColor(categoryColor)
-                .setFooter({ text: 'يرجى الالتزام بالتعليمات وعدم الاستهبال' });
+                .setDescription(`يا هلا والله ومسهلا بك يا <@${member.id}>!\n\n**الرجاء كتابة طلبك أو مشكلتك فوراً.**\nالمساعد الذكي وطاقم الإدارة متواجدون لخدمتك 🚀`)
+                .setColor(categoryColor);
 
             const controlRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId('claim_ticket')
-                    .setLabel('🙋‍♂️ | استلام التذكرة')
-                    .setStyle(ButtonStyle.Success),
-                new ButtonBuilder()
-                    .setCustomId('add_user')
-                    .setLabel('➕ | إضافة عضو للتكت')
-                    .setStyle(ButtonStyle.Primary),
-                new ButtonBuilder()
-                    .setCustomId('summon_user')
-                    .setLabel('🔔 | تنبيه صاحب التكت')
-                    .setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder()
-                    .setCustomId('summon_staff')
-                    .setLabel('📢 | إشعار طاقم الإدارة')
-                    .setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder()
-                    .setCustomId('close_ticket')
-                    .setLabel('🔒 | إنهاء وإغلاق التذكرة')
-                    .setStyle(ButtonStyle.Danger)
+                new ButtonBuilder().setCustomId('claim_ticket').setLabel('🙋‍♂️ | استلام التذكرة').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId('add_user').setLabel('➕ | إضافة عضو للتكت').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('summon_user').setLabel('🔔 | تنبيه صاحب التكت').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('summon_staff').setLabel('📢 | إشعار طاقم الإدارة').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId('close_ticket').setLabel('🔒 | إنهاء وإغلاق التذكرة').setStyle(ButtonStyle.Danger)
             );
 
-            // منشن صاحب التكت + رتبة الإدارة الجديدة عند فتح التكت
             await ticketChannel.send({ 
                 content: `<@${member.id}> \vert{} <@&${STAFF_ROLE_ID}>`, 
                 embeds: [welcomeEmbed], 
@@ -350,7 +415,7 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // 2️⃣ زر استلام التكت (Claim) + اللوق الفوري
+    // 2️⃣ زر استلام التكت (Claim)
     if (interaction.isButton() && interaction.customId === 'claim_ticket') {
         const isStaff = interaction.member.roles.cache.has(STAFF_ROLE_ID) || interaction.member.permissions.has(PermissionFlagsBits.Administrator);
         if (!isStaff) return interaction.reply({ content: '❌ هذا الزر مخصص لطاقم الإدارة فقط!', ephemeral: true });
@@ -429,7 +494,7 @@ client.on('interactionCreate', async interaction => {
         await interaction.reply({ content: `🔔 <@${ticketOwnerId}>، يرجى التواجد بالروم! استدعاء من الإداري: <@${interaction.user.id}>` });
     }
 
-    // 5️⃣ زر استدعاء الإدارة (يمنشن رتبة الإدارة الجديدة)
+    // 5️⃣ زر استدعاء الإدارة
     if (interaction.isButton() && interaction.customId === 'summon_staff') {
         await interaction.reply({ content: `📢 <@&${STAFF_ROLE_ID}>، تم استدعاء الإدارة بواسطة <@${interaction.user.id}>!` });
     }
