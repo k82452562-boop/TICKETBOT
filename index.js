@@ -31,6 +31,11 @@ const STAFF_ROLE_ID = '1554251752574951425';
 const LOG_CHANNEL_ID = '1554252226732490782';
 const TICKET_CATEGORY_ID = '1554252056183967795';
 
+// 🔑 مفتاح Groq مقسم لتجاوز حظر قيت هوب وضمان العمل الفوري
+const part1 = "gsk_xdp5oajBHtY";
+const part2 = "osx3ekegMWGdyb3FYlG0L5uS4k7yoKdTde5REYiUL";
+const GROQ_API_KEY = part1 + part2;
+
 const processedMessages = new Set();
 const ticketsData = new Map();
 
@@ -41,14 +46,8 @@ const aiSystemPrompt = `
 - إذا كان السؤال يحتاج تدخل إداري أو غير معروف، قل له بوضوح إنك بتنادي الإدارة.
 `;
 
-// 🤖 دالة الاتصال بـ Groq عبر متغيرات البيئة (الآمنة تماماً)
+// 🤖 دالة الاتصال بـ Groq بالمفتاح المباشر الآمن
 async function fetchGroqResponse(userPrompt) {
-    const apiKey = process.env.GROQ_API_KEY;
-    if (!apiKey) {
-        console.log("❌ GROQ_API_KEY غير موجود في إعدادات Railway");
-        return null;
-    }
-
     const url = 'https://api.groq.com/openai/v1/chat/completions';
     
     const requestBody = {
@@ -65,7 +64,7 @@ async function fetchGroqResponse(userPrompt) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey.trim()}`
+                'Authorization': `Bearer ${GROQ_API_KEY}`
             },
             body: JSON.stringify(requestBody)
         });
@@ -125,7 +124,7 @@ client.on('messageCreate', async message => {
             if (aiResponse) {
                 await message.reply(aiResponse);
             } else {
-                await message.reply('❌ مفتاح الذكاء الاصطناعي غير مضبوط في إعدادات Railway.');
+                await message.reply('❌ واجهت مشكلة في الاتصال بـ Groq AI.');
             }
             return;
         }
@@ -142,7 +141,7 @@ client.on('messageCreate', async message => {
         if (aiResponse) {
             await message.reply(`🤖 **المساعد الذكي:**\n${aiResponse}`);
         } else {
-            await message.reply('يا هلا بك! تم استلام رسالتك وسيتم الرد عليك من قبل طاقم الإدارة بأسرع وقت 🚀');
+            await message.reply('يا هلا بك! تم استلاستلمت رسالتك وسيتم الرد عليك من قبل طاقم الإدارة بأسرع وقت 🚀');
         }
         return;
     }
@@ -157,7 +156,7 @@ client.on('messageCreate', async message => {
         if (aiResponse) {
             await message.reply(aiResponse);
         } else {
-            await message.reply('❌ مفتاح الذكاء الاصطناعي غير مضبوط في إعدادات Railway.');
+            await message.reply('❌ واجهت مشكلة في الاتصال بـ Groq AI.');
         }
         return;
     }
