@@ -23,16 +23,16 @@ const client = new Client({
     ]
 });
 
-// ⚙️ الإعدادات الأساسية (مُحدثة بالآديهات الجديدة)
-const STAFF_ROLE_ID = '1554251752574951425'; // رتبة الإدارة
-const LOG_CHANNEL_ID = '1554252226732490782'; // روم لوق التكتات الجديد
+// ⚙️ الإعدادات الأساسية (تم تثبيت رتبة الإدارة الجديدة)
+const STAFF_ROLE_ID = '1554251752574951425'; // رتبة الإدارة الجديدة
+const LOG_CHANNEL_ID = '1554252226732490782'; // روم لوق التكتات
 const TICKET_CATEGORY_ID = '1554252056183967795'; // كاتجوري التكتات
 
 // الذاكرة المؤقتة للتكتات والتحذيرات
 const ticketsData = new Map();
 const userWarnings = new Map();
 
-// 📢 دالة مساعدة احترافية لإرسال اللوق لروم اللوق
+// 📢 دالة مساعدة لإرسال اللوق لروم اللوق
 async function sendLog(guild, content, embed) {
     try {
         const logChannel = guild.channels.cache.get(LOG_CHANNEL_ID);
@@ -155,7 +155,6 @@ client.on('messageCreate', async message => {
         try {
             await target.ban({ reason: `الأمر: ${command} | بواسطة: ${message.author.tag} \vert{} السبب: ${reason}` });
             
-            // الرسالة السريعة والمطلوبة حرفياً
             await message.channel.send(`✅ **${target.user.username}** banned from the server! ✈️`);
 
         } catch (err) {
@@ -295,7 +294,7 @@ client.on('interactionCreate', async interaction => {
                 permissionOverwrites: [
                     { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
                     { id: member.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
-                    { id: STAFF_ROLE_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
+                    { id: STAFF_ROLE_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] }, // رتبة الإدارة الجديدة
                     { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] }
                 ],
             });
@@ -314,13 +313,29 @@ client.on('interactionCreate', async interaction => {
                 .setFooter({ text: 'يرجى الالتزام بالتعليمات وعدم الاستهبال' });
 
             const controlRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('claim_ticket').setLabel('استلام التكت').setStyle(ButtonStyle.Success).setEmoji('🙋‍♂️'),
-                new ButtonBuilder().setCustomId('add_user').setLabel('إضافة عضو').setStyle(ButtonStyle.Primary).setEmoji('➕'),
-                new ButtonBuilder().setCustomId('summon_user').setLabel('استدعاء العضو').setStyle(ButtonStyle.Secondary).setEmoji('🔔'),
-                new ButtonBuilder().setCustomId('summon_staff').setLabel('استدعاء الإدارة').setStyle(ButtonStyle.Secondary).setEmoji('📢'),
-                new ButtonBuilder().setCustomId('close_ticket').setLabel('إغلاق التكت').setStyle(ButtonStyle.Danger).setEmoji('🔒')
+                new ButtonBuilder()
+                    .setCustomId('claim_ticket')
+                    .setLabel('🙋‍♂️ | استلام التذكرة')
+                    .setStyle(ButtonStyle.Success),
+                new ButtonBuilder()
+                    .setCustomId('add_user')
+                    .setLabel('➕ | إضافة عضو للتكت')
+                    .setStyle(ButtonStyle.Primary),
+                new ButtonBuilder()
+                    .setCustomId('summon_user')
+                    .setLabel('🔔 | تنبيه صاحب التكت')
+                    .setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId('summon_staff')
+                    .setLabel('📢 | إشعار طاقم الإدارة')
+                    .setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder()
+                    .setCustomId('close_ticket')
+                    .setLabel('🔒 | إنهاء وإغلاق التذكرة')
+                    .setStyle(ButtonStyle.Danger)
             );
 
+            // منشن صاحب التكت + رتبة الإدارة الجديدة عند فتح التكت
             await ticketChannel.send({ 
                 content: `<@${member.id}> \vert{} <@&${STAFF_ROLE_ID}>`, 
                 embeds: [welcomeEmbed], 
@@ -414,7 +429,7 @@ client.on('interactionCreate', async interaction => {
         await interaction.reply({ content: `🔔 <@${ticketOwnerId}>، يرجى التواجد بالروم! استدعاء من الإداري: <@${interaction.user.id}>` });
     }
 
-    // 5️⃣ زر استدعاء الإدارة
+    // 5️⃣ زر استدعاء الإدارة (يمنشن رتبة الإدارة الجديدة)
     if (interaction.isButton() && interaction.customId === 'summon_staff') {
         await interaction.reply({ content: `📢 <@&${STAFF_ROLE_ID}>، تم استدعاء الإدارة بواسطة <@${interaction.user.id}>!` });
     }
