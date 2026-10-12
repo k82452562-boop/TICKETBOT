@@ -33,6 +33,9 @@ const STAFF_ROLE_ID = '1554251752574951425'; // رتبة الإدارة
 const LOG_CHANNEL_ID = '1554252226732490782'; // روم لوق التكتات
 const TICKET_CATEGORY_ID = '1554252056183967795'; // كاتجوري التكتات
 
+// 🔑 مفتاح الذكاء الاصطناعي مضمن مباشرة هنا
+const GEMINI_API_KEY = "AQ.Ab8RN6IuBCgIAevFZTyiy9B9V8GUKUQYtTCezN-ynmKA8R2zqw";
+
 // مانع التكرار المطلق للرسائل
 const processedMessages = new Set();
 
@@ -47,15 +50,13 @@ const aiSystemPrompt = `
 - إذا كان السؤال يحتاج تدخل إداري أو غير معروف، قل له بوضوح إنك بتنادي الإدارة.
 `;
 
-// 🤖 دالة اتصال مباشرة بـ Gemini API تدعم جميع أنواع المفاتيح (AQ. و AIza)
+// 🤖 دالة اتصال مباشرة بـ Gemini API باستخدام المفتاح المضمن
 async function fetchGeminiResponse(userPrompt) {
-    const rawKey = process.env.GEMINI_API_KEY;
-    if (!rawKey) {
-        console.log("❌ GEMINI_API_KEY غير موجود في إعدادات Railway");
+    if (!GEMINI_API_KEY) {
+        console.log("❌ مفتاح الذكاء الاصطناعي غير موجود في الكود");
         return null;
     }
 
-    const apiKey = rawKey.trim();
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`;
     
     const requestBody = {
@@ -70,28 +71,16 @@ async function fetchGeminiResponse(userPrompt) {
     };
 
     try {
-        // تجربة إرسال المفتاح كـ Bearer Header (لمفاتيح AQ.)
-        let response = await fetch(url, {
+        const response = await fetch(url, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${apiKey}`
+                'Authorization': `Bearer ${GEMINI_API_KEY.trim()}`
             },
             body: JSON.stringify(requestBody)
         });
 
-        let data = await response.json();
-
-        // إذا فشلت طريقة Bearer نجرب طريقة Param ?key= (للمفاتيح التقليدية)
-        if (!data || !data.candidates) {
-            const altUrl = `${url}?key=${apiKey}`;
-            response = await fetch(altUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(requestBody)
-            });
-            data = await response.json();
-        }
+        const data = await response.json();
 
         if (data && data.candidates && data.candidates[0]?.content?.parts[0]?.text) {
             return data.candidates[0].content.parts[0].text;
@@ -153,7 +142,7 @@ client.on('messageCreate', async message => {
             if (aiResponse) {
                 await message.reply(aiResponse);
             } else {
-                await message.reply('❌ مفتاح الذكاء الاصطناعي غير مفعل حالياً في إعدادات Railway.');
+                await message.reply('❌ واجهت مشكلة في الاتصال بـ Gemini API.');
             }
             return;
         }
@@ -194,7 +183,7 @@ client.on('messageCreate', async message => {
         if (aiResponse) {
             await message.reply(aiResponse);
         } else {
-            await message.reply('❌ مفتاح الذكاء الاصطناعي غير مفعل حالياً في إعدادات Railway.');
+            await message.reply('❌ واجهت مشكلة في الاتصال بـ Gemini API.');
         }
         return;
     }
