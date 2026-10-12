@@ -1,6 +1,3 @@
-// تشغيل الخادم الوهمي أولاً للبقاء أونلاين 24 ساعة
-require('./server.js');
-
 const { 
     Client, 
     GatewayIntentBits, 
@@ -23,12 +20,12 @@ const client = new Client({
     ]
 });
 
-// ⚙️ الإعدادات الأساسية
+// ⚙️ الإعدادات الأساسية (الآديهات الخاصة بسيرفرك الجديد)
 const STAFF_ROLE_ID = '1554251752574951425'; // رتبة الإدارة
 const LOG_CHANNEL_ID = '1543094678038257784'; // روم اللوق
 const TICKET_CATEGORY_ID = '1554252056183967795'; // كاتجوري التكتات
 
-// الذاكرة المؤقتة للتكتات والتحذيرات
+// ذاكرة مؤقتة للتكتات والتحذيرات
 const ticketsData = new Map();
 const userWarnings = new Map();
 
@@ -59,7 +56,7 @@ client.on('messageCreate', async message => {
     const args = message.content.trim().split(/ +/);
     const command = args[0].toLowerCase();
 
-    // 1️⃣ أمر Setup قائمة التكتات بالإمبد الخارق والتصميم الجديد
+    // 1️⃣ أمر Setup قائمة التكتات
     if (command === '!setup' || command === 'سيت_اب') {
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return message.reply('❌ يا طويل العمر ما عندك صلاحية تستخدم هالأمر!');
@@ -73,16 +70,16 @@ client.on('messageCreate', async message => {
 
 ---
 
-⚖️ **قوانين وشروط فتح التكت (اقرأها زين):**
-- 1️⃣ **اطرح مشكلتك فوراً:** أول ما تفتح التكت اكتب موضوعك وتفاصيلك كاملة بدون ما تنتظر رد "أرحب" أو "موجود".
-- 2️⃣ **يمنع الاستهبال والتجربة:** فتح التكت بدون سبب جدي أو للتجربة يحرّمك من فتح التكتات وقد يعرّضك للباند 👞.
+⚖️ **قوانين وشروط فتح التكت:**
+- 1️⃣ **اطرح مشكلتك فوراً:** أول ما تفتح التكت اكتب موضوعك وتفاصيلك كاملة.
+- 2️⃣ **يمنع الاستهبال والتجربة:** فتح التكت بدون سبب يعرّضك للباند 👞.
 - 3️⃣ **احترام طاقم الإدارة:** التعامل بأسلوب راقي يسرّع من حل مشكلتك.
-- 4️⃣ **التحلي بالصبر:** الإدارة بشر، وسيتم الرد عليك بأسرع وقت ممكن (لا تعمل منشن مكرر للأنماب).
+- 4️⃣ **التحلي بالصبر:** سيتم الرد عليك بأسرع وقت ممكن.
 
 ---
 ✨ **اختر القسم المناسب لك من القائمة المنسدلة بالأسفل:**
             `)
-            .setColor('#FFD700') // لون ذهبي ملكي مميز جداً
+            .setColor('#FFD700')
             .setThumbnail(message.guild.iconURL({ dynamic: true }))
             .setFooter({ text: 'منتدى النظيم • الخدمة السريعة والمميزة', iconURL: client.user.displayAvatarURL() })
             .setTimestamp();
@@ -124,7 +121,7 @@ client.on('messageCreate', async message => {
         return;
     }
 
-    // 2️⃣ أوامر الباند الفاخرة
+    // 2️⃣ أوامر الباند المخصصة
     const banCommands = [
         'بنعالي', '!بنعالي', 
         'بنعال_براء', '!بنعال_براء', 
@@ -178,74 +175,11 @@ client.on('messageCreate', async message => {
         setTimeout(() => msg.delete().catch(() => {}), 3000);
         return;
     }
-
-    // 4️⃣ أمر تحذير عضو
-    if (command === 'تحذير' || command === '!warn' || command === 'warn') {
-        if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
-            return message.reply('❌ ما عندك صلاحية تحذير الأعضاء!');
-        }
-
-        const target = message.mentions.members.first() || 
-            await message.guild.members.fetch(args[1]).catch(() => null);
-
-        if (!target) return message.reply('❌ منشن الشخص المراد تحذيره!');
-
-        const reason = args.slice(2).join(' ') || 'مخالفة قوانين السيرفر';
-        const currentWarns = (userWarnings.get(target.id) || 0) + 1;
-        userWarnings.set(target.id, currentWarns);
-
-        await message.channel.send(`⚠️ تم تحذير <@${target.id}>!\n**السبب:** ${reason}\n**إجمالي التحذيرات:** ${currentWarns}`);
-        return;
-    }
-
-    // 5️⃣ أمر كتم العضو
-    if (command === 'اسكت' || command === '!timeout' || command === 'timeout') {
-        if (!message.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
-            return message.reply('❌ ما عندك صلاحية لكتم الأعضاء!');
-        }
-
-        const target = message.mentions.members.first() || await message.guild.members.fetch(args[1]).catch(() => null);
-        if (!target) return message.reply('❌ منشن الشخص!');
-
-        const minutes = parseInt(args[2]) || 5;
-        try {
-            await target.timeout(minutes * 60 * 1000, `بواسطة: ${message.author.tag}`);
-            await message.channel.send(`🤐 تم إعطاء كتم (Timeout) للعضو <@${target.id}> لمدة ${minutes} دقايق.`);
-        } catch (err) {
-            await message.reply('❌ ما قدرت أعطيه كتم (تأكد من صلاحيات رتبتي).');
-        }
-        return;
-    }
-
-    // 6️⃣ أمر معلومات السيرفر
-    if (command === 'السيرفر' || command === '!server' || command === 'server') {
-        const serverEmbed = new EmbedBuilder()
-            .setTitle(`📊 معلومات سيرفر: ${message.guild.name}`)
-            .addFields(
-                { name: '👥 عدد الأعضاء:', value: `${message.guild.memberCount}`, inline: true },
-                { name: '👑 مالك السيرفر:', value: `<@${message.guild.ownerId}>`, inline: true },
-                { name: '🆔 آيدي السيرفر:', value: `\`${message.guild.id}\``, inline: false }
-            )
-            .setColor('#FFD700')
-            .setThumbnail(message.guild.iconURL());
-
-        await message.channel.send({ embeds: [serverEmbed] });
-        return;
-    }
-
-    // 7️⃣ أمر فحص البينغ
-    if (command === 'بينغ' || command === '!ping' || command === 'ping') {
-        const msg = await message.reply('🏓 جاري قياس السرعة...');
-        const ping = msg.createdTimestamp - message.createdTimestamp;
-        await msg.edit(`🏓 **سرعة استجابة البوت:** \`${ping}ms\` | **بينغ الديسكورد:** \`${Math.round(client.ws.ping)}ms\``);
-        return;
-    }
 });
 
 // 🛠️ التعامل مع التفاعلات والأزرار
 client.on('interactionCreate', async interaction => {
 
-    // 1️⃣ القائمة المنسدلة للتكتات
     if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_select_menu') {
         const selectedValue = interaction.values[0];
 
@@ -260,13 +194,13 @@ client.on('interactionCreate', async interaction => {
         let categoryColor = '#FFD700';
         if (selectedValue === 'support_ticket') {
             categoryName = 'دعم فني';
-            categoryColor = '#FF3366'; // أحمر ووردي فاخر
+            categoryColor = '#FF3366';
         } else if (selectedValue === 'general_ticket') {
             categoryName = 'استفسار عام';
-            categoryColor = '#00FFCC'; // تركواز فاقع
+            categoryColor = '#00FFCC';
         } else if (selectedValue === 'store_ticket') {
             categoryName = 'متجر وشراء';
-            categoryColor = '#FFCC00'; // ذهبي أصفر
+            categoryColor = '#FFCC00';
         }
 
         const channelName = `ticket-${categoryName}-${member.user.username}`.toLowerCase();
@@ -285,7 +219,7 @@ client.on('interactionCreate', async interaction => {
                 topic: member.id,
                 permissionOverwrites: [
                     { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
-                    { id: member.id, allow: [PermissionFlagsBits.ViewChannel, SendMessages: true, PermissionFlagsBits.ReadMessageHistory] },
+                    { id: member.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
                     { id: STAFF_ROLE_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
                     { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] }
                 ],
@@ -298,7 +232,6 @@ client.on('interactionCreate', async interaction => {
                 addedUsers: []
             });
 
-            // إمبد التكت عند الفتح
             const welcomeEmbed = new EmbedBuilder()
                 .setTitle(`🎫 تكت جديد | قسم: ${categoryName}`)
                 .setDescription(`يا هلا والله ومسهلا بك يا <@${member.id}>!\n\n**الرجاء كتابة طلبك أو مشكلتك فوراً بدون الانتظار.**\nطاقم الإدارة تلقى الإشعار وسيقوم بالرد عليك بـأسرع وقت 🚀`)
@@ -327,7 +260,7 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // 2️⃣ زر استلام التكت (Claim)
+    // زر استلام التكت
     if (interaction.isButton() && interaction.customId === 'claim_ticket') {
         const isStaff = interaction.member.roles.cache.has(STAFF_ROLE_ID) || interaction.member.permissions.has(PermissionFlagsBits.Administrator);
         if (!isStaff) return interaction.reply({ content: '❌ هذا الزر مخصص لطاقم الإدارة فقط!', ephemeral: true });
@@ -366,7 +299,7 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // 3️⃣ زر إضافة عضو
+    // زر إضافة عضو
     if (interaction.isButton() && interaction.customId === 'add_user') {
         const isStaff = interaction.member.roles.cache.has(STAFF_ROLE_ID) || interaction.member.permissions.has(PermissionFlagsBits.Administrator);
         if (!isStaff) return interaction.reply({ content: '❌ هذا الزر مخصص لطاقم الإدارة فقط!', ephemeral: true });
@@ -399,19 +332,19 @@ client.on('interactionCreate', async interaction => {
         });
     }
 
-    // 4️⃣ زر استدعاء العضو
+    // زر استدعاء العضو
     if (interaction.isButton() && interaction.customId === 'summon_user') {
         const ticketOwnerId = interaction.channel.topic;
         if (!ticketOwnerId) return interaction.reply({ content: '❌ لم يتم العثور على صاحب التكت.', ephemeral: true });
         await interaction.reply({ content: `🔔 <@${ticketOwnerId}>، يرجى التواجد بالروم! استدعاء من الإداري: <@${interaction.user.id}>` });
     }
 
-    // 5️⃣ زر استدعاء الإدارة
+    // زر استدعاء الإدارة
     if (interaction.isButton() && interaction.customId === 'summon_staff') {
         await interaction.reply({ content: `📢 <@&${STAFF_ROLE_ID}>، تم استدعاء الإدارة بواسطة <@${interaction.user.id}>!` });
     }
 
-    // 6️⃣ زر إغلاق التكت
+    // زر إغلاق التكت
     if (interaction.isButton() && interaction.customId === 'close_ticket') {
         const channel = interaction.channel;
         const data = ticketsData.get(channel.id) || { ownerId: channel.topic || 'غير معروف', category: 'غير محدد', claimedBy: null, addedUsers: [] };
