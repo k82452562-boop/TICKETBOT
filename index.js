@@ -31,7 +31,7 @@ const STAFF_ROLE_ID = '1554251752574951425';
 const LOG_CHANNEL_ID = '1554252226732490782';
 const TICKET_CATEGORY_ID = '1554252056183967795';
 
-// 🔑 مفتاح Groq مقسم لتجاوز حظر قيت هوب وضمان العمل الفوري
+// 🔑 مفتاح Groq مقسم لتجاوز حظر قيت هوب
 const part1 = "gsk_xdp5oajBHtY";
 const part2 = "osx3ekegMWGdyb3FYlG0L5uS4k7yoKdTde5REYiUL";
 const GROQ_API_KEY = part1 + part2;
@@ -39,45 +39,35 @@ const GROQ_API_KEY = part1 + part2;
 const processedMessages = new Set();
 const ticketsData = new Map();
 
-const aiSystemPrompt = `
-أنت بوت ديسكورد ذكي وفلّة وطقطوق لسيرفر "منتدى النظيم".
-تتكلم بلهجة سعودية عامية 100% (مصطلحات: يا بعد حيي، يالطيب، وش السالفة، تكفى، كفو، يا حليلك، أرحب).
-- في الشات العام والتكتات: جاوب العضو بدقة وبلهجة محترمة ولطيفة وسعودية عامية. إذا كان السؤال غبي أو شاطح طقطق عليه بأسلوب فكاهي.
-- إذا كان السؤال يحتاج تدخل إداري أو غير معروف، قل له بوضوح إنك بتنادي الإدارة.
-`;
+const aiSystemPrompt = `أنت بوت ديسكورد ذكي وفلّة وطقطوق لسيرفر منتدى النظيم وتتكلم بلهجة سعودية عامية.`;
 
-// 🤖 دالة الاتصال بـ Groq بالمفتاح المباشر الآمن
+// 🤖 دالة اتصال مبسطة ونهائية بـ Groq
 async function fetchGroqResponse(userPrompt) {
-    const url = 'https://api.groq.com/openai/v1/chat/completions';
-    
-    const requestBody = {
-        model: "llama-3.1-8b-instant",
-        messages: [
-            { role: "system", content: aiSystemPrompt },
-            { role: "user", content: userPrompt }
-        ],
-        temperature: 0.7
-    };
-
     try {
-        const response = await fetch(url, {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${GROQ_API_KEY}`
             },
-            body: JSON.stringify(requestBody)
+            body: JSON.stringify({
+                model: "llama-3.3-70b-versatile",
+                messages: [
+                    { role: "system", content: aiSystemPrompt },
+                    { role: "user", content: userPrompt }
+                ]
+            })
         });
 
         const data = await response.json();
-        if (data && data.choices && data.choices[0]?.message?.content) {
+        if (data.choices && data.choices[0]?.message?.content) {
             return data.choices[0].message.content;
         } else {
-            console.error("❌ Groq Error Response:", JSON.stringify(data));
+            console.error("Groq Error Data:", JSON.stringify(data));
             return null;
         }
     } catch (err) {
-        console.error("❌ Groq Exception:", err);
+        console.error("Fetch Error:", err);
         return null;
     }
 }
@@ -86,19 +76,13 @@ async function sendLog(guild, content, embed) {
     try {
         const logChannel = guild.channels.cache.get(LOG_CHANNEL_ID);
         if (logChannel) {
-            const options = {};
-            if (content) options.content = content;
-            if (embed) options.embeds = [embed];
-            await logChannel.send(options);
+            await logChannel.send({ content, embeds: embed ? [embed] : [] });
         }
-    } catch (err) {
-        console.log('❌ خطأ في إرسال اللوق:', err);
-    }
+    } catch (err) {}
 }
 
 client.once('ready', () => {
-    console.log(`[!] البوت شغال بصاروخ Groq باسم: ${client.user.tag} 👑🚀`);
-    client.user.setActivity('منتدى النظيم 🛡️ | ذكاء Groq الخارق', { type: 0 });
+    console.log(`[!] البوت شغال باسم: ${client.user.tag} 👑🚀`);
 });
 
 client.on('messageCreate', async message => {
@@ -124,7 +108,7 @@ client.on('messageCreate', async message => {
             if (aiResponse) {
                 await message.reply(aiResponse);
             } else {
-                await message.reply('❌ واجهت مشكلة في الاتصال بـ Groq AI.');
+                await message.reply('❌ عذراً، صار خطأ بسيط بالاتصال.');
             }
             return;
         }
@@ -141,7 +125,7 @@ client.on('messageCreate', async message => {
         if (aiResponse) {
             await message.reply(`🤖 **المساعد الذكي:**\n${aiResponse}`);
         } else {
-            await message.reply('يا هلا بك! تم استلاستلمت رسالتك وسيتم الرد عليك من قبل طاقم الإدارة بأسرع وقت 🚀');
+            await message.reply('يا هلا بك! تم استلام رسالتك وسيتم الرد عليك قريباً 🚀');
         }
         return;
     }
@@ -156,7 +140,7 @@ client.on('messageCreate', async message => {
         if (aiResponse) {
             await message.reply(aiResponse);
         } else {
-            await message.reply('❌ واجهت مشكلة في الاتصال بـ Groq AI.');
+            await message.reply('❌ عذراً، صار خطأ بسيط بالاتصال.');
         }
         return;
     }
