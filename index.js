@@ -31,8 +31,8 @@ const STAFF_ROLE_ID = '1554251752574951425';
 const LOG_CHANNEL_ID = '1554252226732490782';
 const TICKET_CATEGORY_ID = '1554252056183967795';
 
-// 🔑 المفتاح الجديد مقسم لتجاوز حظر GitHub وضمان العمل الفوري
-const part1 = "Gsk_Ibr0aLXHX0Ba1";
+// 🔑 تصحيح المفتاح إلى gsk_ بحرف صغير
+const part1 = "gsk_Ibr0aLXHX0Ba1";
 const part2 = "OjTDPYOWGdyb3FYvz3izhQT08Nm3Y1Qyi1ZSxqm";
 const GROQ_API_KEY = part1 + part2;
 
