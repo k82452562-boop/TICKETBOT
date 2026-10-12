@@ -15,7 +15,6 @@ const {
     ChannelType, 
     PermissionFlagsBits 
 } = require('discord.js');
-const { GoogleGenerativeAI } = require('@google/generative-ai');
 require('dotenv').config();
 
 const client = new Client({
@@ -41,23 +40,44 @@ const aiSystemPrompt = `
 - إذا كان السؤال يحتاج تدخل إداري أو غير معروف، قل له بوضوح إنك بتنادي الإدارة.
 `;
 
-// 🤖 اتصال الذكاء عبر المكتبة الرسمية لقوقل
-async function fetchGeminiResponse(userPrompt) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) return null;
+// 🤖 دالة الاتصال بـ Groq API السريع والذكي
+async function fetchGroqResponse(userPrompt) {
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) {
+        console.log("❌ GROQ_API_KEY غير موجود في إعدادات Railway");
+        return null;
+    }
+
+    const url = 'https://api.groq.com/openai/v1/chat/completions';
+    
+    const requestBody = {
+        model: "llama-3.3-70b-versatile",
+        messages: [
+            { role: "system", content: aiSystemPrompt },
+            { role: "user", content: userPrompt }
+        ],
+        temperature: 0.7
+    };
 
     try {
-        const genAI = new GoogleGenerativeAI(apiKey.trim());
-        const model = genAI.getGenerativeModel({ 
-            model: "gemini-1.5-flash",
-            systemInstruction: aiSystemPrompt
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiKey.trim()}`
+            },
+            body: JSON.stringify(requestBody)
         });
 
-        const result = await model.generateContent(userPrompt);
-        const response = await result.response;
-        return response.text();
+        const data = await response.json();
+        if (data && data.choices && data.choices[0]?.message?.content) {
+            return data.choices[0].message.content;
+        } else {
+            console.error("❌ Groq API Error:", JSON.stringify(data));
+            return null;
+        }
     } catch (err) {
-        console.error("❌ Gemini Library Error:", err);
+        console.error("❌ Groq Exception:", err);
         return null;
     }
 }
@@ -77,8 +97,8 @@ async function sendLog(guild, content, embed) {
 }
 
 client.once('ready', () => {
-    console.log(`[!] البوت شغال باسم: ${client.user.tag} 👑🚀`);
-    client.user.setActivity('منتدى النظيم 🛡️', { type: 0 });
+    console.log(`[!] البوت شغال بقوة Groq باسم: ${client.user.tag} 👑🚀`);
+    client.user.setActivity('منتدى النظيم 🛡️ | ذكاء Groq الخارق', { type: 0 });
 });
 
 client.on('messageCreate', async message => {
@@ -100,11 +120,11 @@ client.on('messageCreate', async message => {
             if (!userQuery) return message.reply('اكتب سؤالك يا الغالي 🗿');
 
             await message.channel.sendTyping();
-            const aiResponse = await fetchGeminiResponse(userQuery);
+            const aiResponse = await fetchGroqResponse(userQuery);
             if (aiResponse) {
                 await message.reply(aiResponse);
             } else {
-                await message.reply('❌ مفتاح الذكاء الاصطناعي غير مفعل في إعدادات Railway.');
+                await message.reply('❌ واجهت مشكلة في الاتصال بـ Groq AI.');
             }
             return;
         }
@@ -116,7 +136,7 @@ client.on('messageCreate', async message => {
         if (isStaff) return;
 
         await message.channel.sendTyping();
-        const aiResponse = await fetchGeminiResponse(message.content);
+        const aiResponse = await fetchGroqResponse(message.content);
 
         if (aiResponse) {
             await message.reply(`🤖 **المساعد الذكي:**\n${aiResponse}`);
@@ -131,12 +151,12 @@ client.on('messageCreate', async message => {
         if (!userQuery) return message.reply('وش تبي يا الغالي؟ اكتب سؤالك 🗿');
 
         await message.channel.sendTyping();
-        const aiResponse = await fetchGeminiResponse(userQuery);
+        const aiResponse = await fetchGroqResponse(userQuery);
 
         if (aiResponse) {
             await message.reply(aiResponse);
         } else {
-            await message.reply('❌ مفتاح الذكاء الاصطناعي غير مفعل في إعدادات Railway.');
+            await message.reply('❌ واجهت مشكلة في الاتصال بـ Groq AI.');
         }
         return;
     }
