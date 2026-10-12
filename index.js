@@ -31,8 +31,8 @@ const STAFF_ROLE_ID = '1554251752574951425';
 const LOG_CHANNEL_ID = '1554252226732490782';
 const TICKET_CATEGORY_ID = '1554252056183967795';
 
-// 🔑 مفتاح Groq المباشر في الكود
-const GROQ_API_KEY = "Gsk_xdp5oajBHtYosx3ekegMWGdyb3FYlG0L5uS4k7yoKdTde5REYiUL";
+// 🔑 مفتاح Groq الصحيح (حرف g صغير)
+const GROQ_API_KEY = "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";
 
 const processedMessages = new Set();
 const ticketsData = new Map();
@@ -44,12 +44,12 @@ const aiSystemPrompt = `
 - إذا كان السؤال يحتاج تدخل إداري أو غير معروف، قل له بوضوح إنك بتنادي الإدارة.
 `;
 
-// 🤖 دالة الاتصال بـ Groq API باستخدام المفتاح المباشر
+// 🤖 دالة الاتصال بـ Groq المحدثة بنموذج سليم 100%
 async function fetchGroqResponse(userPrompt) {
     const url = 'https://api.groq.com/openai/v1/chat/completions';
     
     const requestBody = {
-        model: "llama-3.3-70b-versatile",
+        model: "llama-3.1-8b-instant",
         messages: [
             { role: "system", content: aiSystemPrompt },
             { role: "user", content: userPrompt }
@@ -71,7 +71,7 @@ async function fetchGroqResponse(userPrompt) {
         if (data && data.choices && data.choices[0]?.message?.content) {
             return data.choices[0].message.content;
         } else {
-            console.error("❌ Groq API Error:", JSON.stringify(data));
+            console.error("❌ Groq Error Response:", JSON.stringify(data));
             return null;
         }
     } catch (err) {
@@ -102,6 +102,7 @@ client.once('ready', () => {
 client.on('messageCreate', async message => {
     if (message.author.bot || !message.guild) return;
 
+    // مانع التكرار الصارم
     if (processedMessages.has(message.id)) return;
     processedMessages.add(message.id);
     setTimeout(() => processedMessages.delete(message.id), 30000);
@@ -109,6 +110,7 @@ client.on('messageCreate', async message => {
     const args = message.content.trim().split(/ +/);
     const command = args[0].toLowerCase();
 
+    // 1️⃣ الشات في التكتات
     if (message.channel.parentId === TICKET_CATEGORY_ID) {
         const isExplicitAiCommand = command === '!سؤال' || command === 'إذكاء' || command === '!ذكاء' || message.mentions.has(client.user);
         const ticketInfo = ticketsData.get(message.channel.id) || { claimedBy: null };
@@ -144,6 +146,7 @@ client.on('messageCreate', async message => {
         return;
     }
 
+    // 2️⃣ الشات العام
     if (message.mentions.has(client.user) || command === '!سؤال' || command === 'إذكاء' || command === '!ذكاء') {
         const userQuery = message.content.replace(/<@!?\d+>|!سؤال|إذكاء|!ذكاء/g, '').trim();
         if (!userQuery) return message.reply('وش تبي يا الغالي؟ اكتب سؤالك 🗿');
@@ -159,6 +162,7 @@ client.on('messageCreate', async message => {
         return;
     }
 
+    // 3️⃣ أمر سيت اب
     if (command === '!setup' || command === 'سيت_اب') {
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return message.reply('❌ ما عندك صلاحية!');
 
