@@ -381,7 +381,7 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // 3️⃣ 🙋‍♂️ زر استلام التكت (قفل التكت عن بقية الإدارة، وإرسال لوق خاص لبوت النقاط)
+    // 3️⃣ 🙋‍♂️ زر استلام التكت (بالشكل القديم المطلوب للإيمبد + ضبط الصلاحيات + لوق النقاط)
     if (interaction.isButton() && interaction.customId === 'claim_ticket') {
         const isStaff = interaction.member.roles.cache.has(STAFF_ROLE_ID) || interaction.member.roles.cache.has(HIGHER_STAFF_ROLE_ID) || interaction.member.permissions.has(PermissionFlagsBits.Administrator);
         if (!isStaff) return interaction.reply({ content: '❌ هذا الزر مخصص للإدارة فقط يا بعد حيي!', ephemeral: true });
@@ -399,10 +399,11 @@ client.on('interactionCreate', async interaction => {
         ticketsData.set(interaction.channel.id, data);
 
         try {
-            // أ) تعديل صلاحيات القناة: قفل التكت عن الإدارة العامة وسماح فقط للمستلم والإدارة العليا
+            // أ) تعديل الصلاحيات: الإدارة العامة يَرون فقط بدون كتابة، والمستلم والعليا بكامل الصلاحيات
             await interaction.channel.permissionOverwrites.edit(STAFF_ROLE_ID, {
-                ViewChannel: false,
-                SendMessages: false
+                ViewChannel: true,
+                SendMessages: false,
+                ReadMessageHistory: true
             });
 
             await interaction.channel.permissionOverwrites.edit(interaction.user.id, {
@@ -417,7 +418,7 @@ client.on('interactionCreate', async interaction => {
                 ReadMessageHistory: true
             });
 
-            // ب) تحديث حالة الأزرار
+            // ب) تحديث الزر
             const rows = interaction.message.components.map(row => {
                 const newRow = ActionRowBuilder.from(row);
                 newRow.components.forEach(comp => {
@@ -430,10 +431,16 @@ client.on('interactionCreate', async interaction => {
 
             await interaction.update({ components: rows });
             
-            // ج) إرسال تنبيه في شات التكت
-            await interaction.channel.send(`🙋‍♂️ تم استلام التكت بواسطة <@${interaction.user.id}> وتم تخصيصه للإداري والإدارة العليا فقط.`);
+            // ج) إرسال رسالة الاستلام بالشكل القديم تماماً (الإيمبد المطابق لصورتك)[span_1](start_span)[span_1](end_span)
+            const claimEmbed = new EmbedBuilder()
+                .setTitle('🙋‍♂️ استلام تكت')
+                .setDescription(`تم استلام التكت بواسطة: <@${interaction.user.id}>`)
+                .setColor('#F1C40F')
+                .setTimestamp();
 
-            // د) إرسال رسالة لوق فورية في روم اللوقز لبوت النقاط
+            await interaction.channel.send({ embeds: [claimEmbed] });
+
+            // د) إرسال رسالة لوق فورية لبوت النقاط
             const claimLogEmbed = new EmbedBuilder()
                 .setTitle('📥 إشعار استلام تذكرة جديد')
                 .setDescription(`🙋‍♂️ قام الإداري <@${interaction.user.id}> (\`${interaction.user.id}\`) باستلام التكت **#${interaction.channel.name}**`)
@@ -447,7 +454,7 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // 4️⃣ 🔄 زر تفريغ الاستلام (محصور بمستلم التكت والإدارة العليا فقط)
+    // 4️⃣ 🔄 زر تفريغ الاستلام
     if (interaction.isButton() && interaction.customId === 'unclaim_ticket') {
         const data = ticketsData.get(interaction.channel.id);
         if (!data || !data.claimedBy) {
@@ -468,7 +475,6 @@ client.on('interactionCreate', async interaction => {
         ticketsData.set(interaction.channel.id, data);
 
         try {
-            // إعادة فتح الصلاحيات للإدارة العامة
             await interaction.channel.permissionOverwrites.edit(STAFF_ROLE_ID, {
                 ViewChannel: true,
                 SendMessages: true,
@@ -486,14 +492,14 @@ client.on('interactionCreate', async interaction => {
             });
 
             await interaction.update({ components: rows });
-            await interaction.followUp({ content: `🔄 **تم إلغاء الاستلام وتفريغ التكت بنجاح! تم إعادة فتح التكت لطاقم الإدارة مجدداً.**` });
+            await interaction.followUp({ content: `🔄 **تم إلغاء الاستلام وتفريغ التكت بنجاح! تم إعادة صلاحية الكتابة لطاقم الإدارة.**` });
 
         } catch (err) {
             console.log('خطأ أثناء تفريغ التكت:', err);
         }
     }
 
-    // 5️⃣ 👤 زر معلومات العضو (يظهر للجميع في الشات العام)
+    // 5️⃣ 👤 زر معلومات العضو (يظهر علناً في الشات)
     if (interaction.isButton() && interaction.customId === 'user_info_button') {
         const ownerId = interaction.channel.topic;
         if (!ownerId) return interaction.reply({ content: '❌ متعذر العثور على صاحب التكت.', ephemeral: true });
@@ -514,7 +520,6 @@ client.on('interactionCreate', async interaction => {
             .setFooter({ text: `طلب بواسطة: ${interaction.user.tag}` })
             .setTimestamp();
 
-        // إرسال البطاقة علنياً في الشات ليراها الجميع
         await interaction.reply({ embeds: [infoEmbed], ephemeral: false });
     }
 
@@ -585,7 +590,7 @@ client.on('interactionCreate', async interaction => {
         await interaction.update({ content: '✅ تم إلغاء عملية إغلاق التكت.', embeds: [], components: [] });
     }
 
-    // 1️⃣1️⃣ تأكيد الإغلاق الفعلي (حفظ اللوق النهائي الشامل)
+    // 1️⃣1️⃣ تأكيد الإغلاق الفعلي
     if (interaction.isButton() && interaction.customId === 'confirm_close_ticket') {
         const channel = interaction.channel;
         const data = ticketsData.get(channel.id) || { ownerId: channel.topic || 'غير معروف', category: 'دعم فني', claimedBy: null, addedUsers: [], createdAt: Date.now() };
