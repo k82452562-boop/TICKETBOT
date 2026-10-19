@@ -65,7 +65,7 @@ client.on('messageCreate', async message => {
     const args = message.content.trim().split(/ +/);
     const command = args[0].toLowerCase();
 
-    // 1️⃣ أمر Setup قائمة التكتات (بالتنسيق الرسمي الجديد)
+    // 1️⃣ أمر Setup قائمة التكتات
     if (command === '!setup' || command === 'سيت_اب') {
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return message.reply('❌ يا طويل العمر ما عندك صلاحية تستخدم هالأمر!');
@@ -265,7 +265,6 @@ client.on('interactionCreate', async interaction => {
                 ],
             });
 
-            // حفظ بيانات التكت مع وقت البدء وحالة المستلم ومن أغلقه
             ticketsData.set(ticketChannel.id, {
                 ownerId: member.id,
                 category: categoryName,
@@ -313,7 +312,7 @@ client.on('interactionCreate', async interaction => {
 
         const adminTarget = interaction.fields.getTextInputValue('complaint_admin_name');
         const details = interaction.fields.getTextInputValue('complaint_details');
-        const proof = interaction.fields.getTextInputValue('complaint_proof'] || 'لا يوجد أدلة مرفقة';
+        const proof = interaction.fields.getTextInputValue('complaint_proof') || 'لا يوجد أدلة مرفقة';
 
         const channelName = `ticket-شكوى-${member.user.username}`.toLowerCase();
 
@@ -379,7 +378,7 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // 3️⃣ 🙋‍♂️ زر استلام التكت (لتفعيل بوت النقاط والطريقة القديمة)
+    // 3️⃣ 🙋‍♂️ زر استلام التكت
     if (interaction.isButton() && interaction.customId === 'claim_ticket') {
         const isStaff = interaction.member.roles.cache.has(STAFF_ROLE_ID) || interaction.member.roles.cache.has(HIGHER_STAFF_ROLE_ID) || interaction.member.permissions.has(PermissionFlagsBits.Administrator);
         if (!isStaff) return interaction.reply({ content: '❌ هذا الزر مخصص للإدارة فقط يا بعد حيي!', ephemeral: true });
@@ -408,8 +407,6 @@ client.on('interactionCreate', async interaction => {
             });
 
             await interaction.update({ components: rows });
-            
-            // إرسال الرسالة النصية لكي يرصدها بوت النقاط الخارجي
             await interaction.channel.send(`🙋‍♂️ تم استلام التكت بواسطة <@${interaction.user.id}>`);
 
         } catch (err) {
@@ -533,14 +530,13 @@ client.on('interactionCreate', async interaction => {
         await interaction.update({ content: '✅ تم إلغاء عملية إغلاق التكت.', embeds: [], components: [] });
     }
 
-    // 1️⃣1️⃣ ✅ تأكيد الإغلاق الفعلي (تحديث اللوق بالصورة المطلوبة تماماً)
+    // 1️⃣1️⃣ ✅ تأكيد الإغلاق الفعلي
     if (interaction.isButton() && interaction.customId === 'confirm_close_ticket') {
         const channel = interaction.channel;
         const data = ticketsData.get(channel.id) || { ownerId: channel.topic || 'غير معروف', category: 'دعم فني', claimedBy: null, addedUsers: [], createdAt: Date.now() };
 
         await interaction.update({ content: '🔒 جاري إغلاق التكت وحفظ التقرير...', embeds: [], components: [] });
 
-        // حساب عدد الرسائل
         let messageCount = 0;
         try {
             const fetchedMessages = await channel.messages.fetch({ limit: 100 });
@@ -549,11 +545,9 @@ client.on('interactionCreate', async interaction => {
             messageCount = 1;
         }
 
-        // حساب مدة التذكرة بالدقائق
         const durationMs = Date.now() - data.createdAt;
         const durationMinutes = Math.max(1, Math.round(durationMs / 60000));
 
-        // تجهيز المشاركين
         const participantsText = [];
         if (data.claimedBy) {
             participantsText.push(`👑 — المستلم: <@${data.claimedBy}>`);
@@ -565,11 +559,9 @@ client.on('interactionCreate', async interaction => {
             });
         }
 
-        // جلب اسم المستلم ومن أغلق التكت بوضوح
         const claimerText = data.claimedBy ? `<@${data.claimedBy}>` : 'لم تُستلم';
         const closerText = `<@${interaction.user.id}>`;
 
-        // تصميم اللوق بالشكل المطلوب تماماً
         const exactLogEmbed = new EmbedBuilder()
             .setTitle(`📦 نسخة التذكرة #0001 — ${data.category}`)
             .setDescription(`🔒 انحفظت تلقائياً عند الإغلاق — أغلَقها ${closerText}`)
