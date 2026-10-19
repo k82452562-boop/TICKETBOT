@@ -242,12 +242,25 @@ client.on('interactionCreate', async interaction => {
         const member = interaction.member;
 
         let categoryName = 'دعم';
+        let categoryPrefix = 'تكت-دعم';
         let categoryColor = '#FFD700';
-        if (selectedValue === 'support_ticket') { categoryName = 'دعم فني'; categoryColor = '#FF3366'; }
-        else if (selectedValue === 'general_ticket') { categoryName = 'استفسار عام'; categoryColor = '#00FFCC'; }
-        else if (selectedValue === 'store_ticket') { categoryName = 'متجر وشراء'; categoryColor = '#FFCC00'; }
 
-        const channelName = `ticket-${selectedValue.replace('_ticket', '')}-${member.user.username.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'user'}`;
+        if (selectedValue === 'support_ticket') { 
+            categoryName = 'دعم فني'; 
+            categoryPrefix = 'تكت-دعم-فني'; 
+            categoryColor = '#FF3366'; 
+        } else if (selectedValue === 'general_ticket') { 
+            categoryName = 'استفسار عام'; 
+            categoryPrefix = 'تكت-استفسار-عام'; 
+            categoryColor = '#00FFCC'; 
+        } else if (selectedValue === 'store_ticket') { 
+            categoryName = 'متجر وشراء'; 
+            categoryPrefix = 'تكت-متجر'; 
+            categoryColor = '#FFCC00'; 
+        }
+
+        // اسم الروم بالعربي وبصيغة مقبولة في ديسكورد
+        const channelName = `${categoryPrefix}-${member.user.username.toLowerCase()}`;
         
         await interaction.deferReply({ ephemeral: true });
 
@@ -316,7 +329,7 @@ client.on('interactionCreate', async interaction => {
         const details = interaction.fields.getTextInputValue('complaint_details');
         const proof = interaction.fields.getTextInputValue('complaint_proof') || 'لا يوجد أدلة مرفقة';
 
-        const channelName = `ticket-complaint-${member.user.username.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() || 'user'}`;
+        const channelName = `تكت-شكوى-${member.user.username.toLowerCase()}`;
 
         await interaction.deferReply({ ephemeral: true });
 
@@ -381,7 +394,7 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // 3️⃣ 🙋‍♂️ زر استلام التكت (بالشكل القديم المطلوب للإيمبد + ضبط الصلاحيات + لوق النقاط)
+    // 3️⃣ 🙋‍♂️ زر استلام التكت
     if (interaction.isButton() && interaction.customId === 'claim_ticket') {
         const isStaff = interaction.member.roles.cache.has(STAFF_ROLE_ID) || interaction.member.roles.cache.has(HIGHER_STAFF_ROLE_ID) || interaction.member.permissions.has(PermissionFlagsBits.Administrator);
         if (!isStaff) return interaction.reply({ content: '❌ هذا الزر مخصص للإدارة فقط يا بعد حيي!', ephemeral: true });
@@ -399,7 +412,6 @@ client.on('interactionCreate', async interaction => {
         ticketsData.set(interaction.channel.id, data);
 
         try {
-            // أ) تعديل الصلاحيات: الإدارة العامة يَرون فقط بدون كتابة، والمستلم والعليا بكامل الصلاحيات
             await interaction.channel.permissionOverwrites.edit(STAFF_ROLE_ID, {
                 ViewChannel: true,
                 SendMessages: false,
@@ -418,7 +430,6 @@ client.on('interactionCreate', async interaction => {
                 ReadMessageHistory: true
             });
 
-            // ب) تحديث الزر
             const rows = interaction.message.components.map(row => {
                 const newRow = ActionRowBuilder.from(row);
                 newRow.components.forEach(comp => {
@@ -431,7 +442,6 @@ client.on('interactionCreate', async interaction => {
 
             await interaction.update({ components: rows });
             
-            // ج) إرسال رسالة الاستلام بالشكل القديم تماماً (الإيمبد المطابق لصورتك)[span_1](start_span)[span_1](end_span)
             const claimEmbed = new EmbedBuilder()
                 .setTitle('🙋‍♂️ استلام تكت')
                 .setDescription(`تم استلام التكت بواسطة: <@${interaction.user.id}>`)
@@ -440,7 +450,6 @@ client.on('interactionCreate', async interaction => {
 
             await interaction.channel.send({ embeds: [claimEmbed] });
 
-            // د) إرسال رسالة لوق فورية لبوت النقاط
             const claimLogEmbed = new EmbedBuilder()
                 .setTitle('📥 إشعار استلام تذكرة جديد')
                 .setDescription(`🙋‍♂️ قام الإداري <@${interaction.user.id}> (\`${interaction.user.id}\`) باستلام التكت **#${interaction.channel.name}**`)
@@ -499,7 +508,7 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // 5️⃣ 👤 زر معلومات العضو (يظهر علناً في الشات)
+    // 5️⃣ 👤 زر معلومات العضو
     if (interaction.isButton() && interaction.customId === 'user_info_button') {
         const ownerId = interaction.channel.topic;
         if (!ownerId) return interaction.reply({ content: '❌ متعذر العثور على صاحب التكت.', ephemeral: true });
