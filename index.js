@@ -30,7 +30,7 @@ const client = new Client({
     ]
 });
 
-// ⚙️ الثوابت والآيديات
+// ⚙️ الثوابت والآيديات (تأكد منها مطابقة لسيرفرك تماماً)
 const STAFF_ROLE_ID = '1545520633939624006'; // رتبة الإدارة العامة
 const HIGHER_STAFF_ROLE_ID = '1545520950064316516'; // رتبة الشكاوى والمسؤولين العليا
 const LOG_CHANNEL_ID = '1543094678038257784'; // روم اللوق
@@ -301,7 +301,9 @@ client.on('interactionCreate', async interaction => {
             await interaction.editReply({ content: `✅ تم إنشاء التكت بنجاح: ${ticketChannel}` });
 
         } catch (error) {
-            await interaction.editReply({ content: '❌ حدث خطأ أثناء إنشاء التكت.' }).catch(() => {});
+            // 👇 هنا يطبع الخطأ الحقيقي في اللوقز لتتأكد من السبب
+            console.error('❌ خطأ إنشاء التكت بالتفصيل:', error);
+            await interaction.editReply({ content: '❌ حدث خطأ أثناء إنشاء التكت. (راجع لوقز Railway لمعرفة سبب الخطأ البرمجي الدقيق).' }).catch(() => {});
         }
     }
 
@@ -374,6 +376,7 @@ client.on('interactionCreate', async interaction => {
             await interaction.editReply({ content: `✅ تم فتح تكت الشكوى بنجاح وسيتم معالجته بسرية: ${ticketChannel}` });
 
         } catch (error) {
+            console.error('❌ خطأ إنشاء تكت الشكوى بالتفصيل:', error);
             await interaction.editReply({ content: '❌ حدث خطأ أثناء فتح تكت الشكوى.' });
         }
     }
