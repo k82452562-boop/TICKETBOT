@@ -261,6 +261,7 @@ client.on('interactionCreate', async interaction => {
                     { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
                     { id: member.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
                     { id: STAFF_ROLE_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
+                    { id: HIGHER_STAFF_ROLE_ID, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] },
                     { id: client.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ManageChannels] }
                 ],
             });
@@ -286,7 +287,6 @@ client.on('interactionCreate', async interaction => {
                 new ButtonBuilder().setCustomId('summon_staff').setLabel('📢 | إشعار الإدارة').setStyle(ButtonStyle.Secondary)
             );
 
-            // تم تصحيح نمط الزر أدناه من ButtonStyle.Warning (الغير معتمدة) إلى ButtonStyle.Secondary
             const controlRow2 = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('user_info_button').setLabel('👤 | معلومات العضو').setStyle(ButtonStyle.Secondary),
                 new ButtonBuilder().setCustomId('unclaim_ticket').setLabel('🔄 | تفريغ الاستلام').setStyle(ButtonStyle.Secondary),
@@ -381,7 +381,7 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // 3️⃣ استلام التكت
+    // 3️⃣ 🙋‍♂️ زر استلام التكت (قفل التكت عن بقية الإدارة، وإرسال لوق خاص لبوت النقاط)
     if (interaction.isButton() && interaction.customId === 'claim_ticket') {
         const isStaff = interaction.member.roles.cache.has(STAFF_ROLE_ID) || interaction.member.roles.cache.has(HIGHER_STAFF_ROLE_ID) || interaction.member.permissions.has(PermissionFlagsBits.Administrator);
         if (!isStaff) return interaction.reply({ content: '❌ هذا الزر مخصص للإدارة فقط يا بعد حيي!', ephemeral: true });
@@ -390,7 +390,7 @@ client.on('interactionCreate', async interaction => {
 
         if (data.claimedBy) {
             return interaction.reply({ 
-                content: `❌ **يا الطيب التكت هذا أسبقك عليه واستلمه الإداري:** <@${data.claimedBy}>!`, 
+                content: `❌ **التكت مستلم سابقاً بواسطة الإداري:** <@${data.claimedBy}>!`, 
                 ephemeral: true 
             });
         }
@@ -399,6 +399,25 @@ client.on('interactionCreate', async interaction => {
         ticketsData.set(interaction.channel.id, data);
 
         try {
+            // أ) تعديل صلاحيات القناة: قفل التكت عن الإدارة العامة وسماح فقط للمستلم والإدارة العليا
+            await interaction.channel.permissionOverwrites.edit(STAFF_ROLE_ID, {
+                ViewChannel: false,
+                SendMessages: false
+            });
+
+            await interaction.channel.permissionOverwrites.edit(interaction.user.id, {
+                ViewChannel: true,
+                SendMessages: true,
+                ReadMessageHistory: true
+            });
+
+            await interaction.channel.permissionOverwrites.edit(HIGHER_STAFF_ROLE_ID, {
+                ViewChannel: true,
+                SendMessages: true,
+                ReadMessageHistory: true
+            });
+
+            // ب) تحديث حالة الأزرار
             const rows = interaction.message.components.map(row => {
                 const newRow = ActionRowBuilder.from(row);
                 newRow.components.forEach(comp => {
@@ -410,41 +429,71 @@ client.on('interactionCreate', async interaction => {
             });
 
             await interaction.update({ components: rows });
-            await interaction.channel.send(`🙋‍♂️ تم استلام التكت بواسطة <@${interaction.user.id}>`);
+            
+            // ج) إرسال تنبيه في شات التكت
+            await interaction.channel.send(`🙋‍♂️ تم استلام التكت بواسطة <@${interaction.user.id}> وتم تخصيصه للإداري والإدارة العليا فقط.`);
+
+            // د) إرسال رسالة لوق فورية في روم اللوقز لبوت النقاط
+            const claimLogEmbed = new EmbedBuilder()
+                .setTitle('📥 إشعار استلام تذكرة جديد')
+                .setDescription(`🙋‍♂️ قام الإداري <@${interaction.user.id}> (\`${interaction.user.id}\`) باستلام التكت **#${interaction.channel.name}**`)
+                .setColor('#2ECC71')
+                .setTimestamp();
+
+            await sendLog(interaction.guild, `🙋‍♂️ قام الإداري <@${interaction.user.id}> باستلام التكت ${interaction.channel.name}`, claimLogEmbed);
 
         } catch (err) {
-            console.log('خطأ في استلام التكت:', err);
+            console.log('خطأ في استلام التكت وتعديل الصلاحيات:', err);
         }
     }
 
-    // 4️⃣ تفريغ الاستلام
+    // 4️⃣ 🔄 زر تفريغ الاستلام (محصور بمستلم التكت والإدارة العليا فقط)
     if (interaction.isButton() && interaction.customId === 'unclaim_ticket') {
-        const isStaff = interaction.member.roles.cache.has(STAFF_ROLE_ID) || interaction.member.roles.cache.has(HIGHER_STAFF_ROLE_ID) || interaction.member.permissions.has(PermissionFlagsBits.Administrator);
-        if (!isStaff) return interaction.reply({ content: '❌ هذا الزر مخصص لطاقم الإدارة فقط!', ephemeral: true });
-
         const data = ticketsData.get(interaction.channel.id);
         if (!data || !data.claimedBy) {
             return interaction.reply({ content: '⚠️ التكت مو مستلم أصلاً عشان تفرغه!', ephemeral: true });
         }
 
+        const isClaimer = interaction.user.id === data.claimedBy;
+        const isHigherStaff = interaction.member.roles.cache.has(HIGHER_STAFF_ROLE_ID) || interaction.member.permissions.has(PermissionFlagsBits.Administrator);
+
+        if (!isClaimer && !isHigherStaff) {
+            return interaction.reply({ 
+                content: `❌ **عفواً! فقط الإداري المستلم للتكت (<@${data.claimedBy}>) أو الإدارة العليا هم من يستطيعون تفريغ التكت!**`, 
+                ephemeral: true 
+            });
+        }
+
         data.claimedBy = null;
         ticketsData.set(interaction.channel.id, data);
 
-        const rows = interaction.message.components.map(row => {
-            const newRow = ActionRowBuilder.from(row);
-            newRow.components.forEach(comp => {
-                if (comp.data.custom_id === 'claim_ticket') {
-                    comp.setDisabled(false).setLabel('🙋‍♂️ | استلام التكت');
-                }
+        try {
+            // إعادة فتح الصلاحيات للإدارة العامة
+            await interaction.channel.permissionOverwrites.edit(STAFF_ROLE_ID, {
+                ViewChannel: true,
+                SendMessages: true,
+                ReadMessageHistory: true
             });
-            return newRow;
-        });
 
-        await interaction.update({ components: rows });
-        await interaction.followUp({ content: `🔄 **تم إلغاء الاستلام وتفريغ التكت بنجاح! أصبح متاحاً للإدارة مجدداً.**` });
+            const rows = interaction.message.components.map(row => {
+                const newRow = ActionRowBuilder.from(row);
+                newRow.components.forEach(comp => {
+                    if (comp.data.custom_id === 'claim_ticket') {
+                        comp.setDisabled(false).setLabel('🙋‍♂️ | استلام التكت');
+                    }
+                });
+                return newRow;
+            });
+
+            await interaction.update({ components: rows });
+            await interaction.followUp({ content: `🔄 **تم إلغاء الاستلام وتفريغ التكت بنجاح! تم إعادة فتح التكت لطاقم الإدارة مجدداً.**` });
+
+        } catch (err) {
+            console.log('خطأ أثناء تفريغ التكت:', err);
+        }
     }
 
-    // 5️⃣ معلومات العضو
+    // 5️⃣ 👤 زر معلومات العضو (يظهر للجميع في الشات العام)
     if (interaction.isButton() && interaction.customId === 'user_info_button') {
         const ownerId = interaction.channel.topic;
         if (!ownerId) return interaction.reply({ content: '❌ متعذر العثور على صاحب التكت.', ephemeral: true });
@@ -453,7 +502,7 @@ client.on('interactionCreate', async interaction => {
         if (!targetMember) return interaction.reply({ content: '❌ العضو غير موجود بالسيرفر حالياً.', ephemeral: true });
 
         const infoEmbed = new EmbedBuilder()
-            .setTitle(`👤 بطاقة صاحب التكت: ${targetMember.user.username}`)
+            .setTitle(`👤 بطاقة بيانات صاحب التكت: ${targetMember.user.username}`)
             .setThumbnail(targetMember.user.displayAvatarURL({ dynamic: true }))
             .setColor('#3498DB')
             .addFields(
@@ -461,9 +510,12 @@ client.on('interactionCreate', async interaction => {
                 { name: '🏷️ اسمه بالسيرفر:', value: `${targetMember.displayName}`, inline: true },
                 { name: '📅 انضمامه للسيرفر:', value: `<t:${Math.floor(targetMember.joinedTimestamp / 1000)}:R>`, inline: false },
                 { name: '📅 إنشاء الحساب:', value: `<t:${Math.floor(targetMember.user.createdTimestamp / 1000)}:R>`, inline: false }
-            );
+            )
+            .setFooter({ text: `طلب بواسطة: ${interaction.user.tag}` })
+            .setTimestamp();
 
-        await interaction.reply({ embeds: [infoEmbed], ephemeral: true });
+        // إرسال البطاقة علنياً في الشات ليراها الجميع
+        await interaction.reply({ embeds: [infoEmbed], ephemeral: false });
     }
 
     // 6️⃣ إضافة عضو
@@ -533,7 +585,7 @@ client.on('interactionCreate', async interaction => {
         await interaction.update({ content: '✅ تم إلغاء عملية إغلاق التكت.', embeds: [], components: [] });
     }
 
-    // 1️⃣1️⃣ تأكيد الإغلاق الفعلي
+    // 1️⃣1️⃣ تأكيد الإغلاق الفعلي (حفظ اللوق النهائي الشامل)
     if (interaction.isButton() && interaction.customId === 'confirm_close_ticket') {
         const channel = interaction.channel;
         const data = ticketsData.get(channel.id) || { ownerId: channel.topic || 'غير معروف', category: 'دعم فني', claimedBy: null, addedUsers: [], createdAt: Date.now() };
@@ -566,7 +618,7 @@ client.on('interactionCreate', async interaction => {
         const closerText = `<@${interaction.user.id}>`;
 
         const exactLogEmbed = new EmbedBuilder()
-            .setTitle(`📦 نسخة التذكرة #0001 — ${data.category}`)
+            .setTitle(`📦 نسخة التذكرة — ${data.category}`)
             .setDescription(`🔒 انحفظت تلقائياً عند الإغلاق — أغلَقها ${closerText}`)
             .addFields(
                 { name: '👤 صاحب التذكرة', value: `<@${data.ownerId}>\n\`${data.ownerId}\``, inline: false },
